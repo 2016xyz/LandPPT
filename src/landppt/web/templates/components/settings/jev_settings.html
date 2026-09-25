@@ -1,0 +1,43 @@
+<section class="jev-settings" id="jevSettings" aria-labelledby="jevSettingsTitle">
+    <div class="jev-heading">
+        <div><h3 id="jevSettingsTitle">决策模型配置</h3><p>使用类似 Jev 的决策模型，为快速模式评估并匹配模板版式。</p></div>
+        <label class="jev-toggle"><input type="checkbox" id="packageJevEnabled" role="switch"><span class="jev-switch" aria-hidden="true"></span><span>启用决策模型</span></label>
+    </div>
+    <div class="jev-form-body">
+    <div class="jev-fields jev-connection-fields">
+        <label for="packageJevProtocol">接口协议
+            <select id="packageJevProtocol"><option value="jev">Jev / TypeSafe</option><option value="openai">OpenAI 兼容</option></select>
+            <small>按服务提供方的接口类型选择。</small>
+        </label>
+        <label for="packageJevEndpoint">端点 URL
+            <input type="url" id="packageJevEndpoint" maxlength="2000" required value="https://api.typesafe.ai/v1/systemone" spellcheck="false">
+            <small id="jevEndpointHint">填写完整请求地址，例如 /v1/systemone；不会自动追加路径。</small>
+        </label>
+        <label for="packageJevKey">API Key
+            <input type="password" id="packageJevKey" autocomplete="new-password" placeholder="输入 API Key" aria-describedby="jevKeyStatus">
+            <small id="jevKeyStatus">正在读取配置…</small>
+        </label>
+        <label for="packageJevModel">模型名称
+            <input id="packageJevModel" value="jev-latest" maxlength="100" required>
+            <small>填写服务提供方的模型名称，例如 jev-latest。</small>
+        </label>
+    </div>
+    <div class="jev-section-label">请求设置</div>
+    <div class="jev-fields jev-request-fields">
+        <label for="packageJevTimeout">请求超时（秒）
+            <input type="number" id="packageJevTimeout" min="1" max="120" value="30" required>
+        </label>
+        <label for="packageJevRetries">失败重试次数
+            <input type="number" id="packageJevRetries" min="0" max="3" value="2" required>
+        </label>
+        <label for="packageJevConcurrency">并发请求上限
+            <input type="number" id="packageJevConcurrency" min="1" max="16" value="1" required>
+            <small>支持 1–16 个匹配请求；遇到限流会自动等待重试。</small>
+        </label>
+    </div>
+    <p class="jev-note">页面内容由当前内容生成模型编写。关闭决策模型后，仍可通过当前模型与规则匹配版式。测试会发送一次最小评分请求，使用当前填写的配置，不会自动保存。</p>
+    </div>
+    <div class="jev-actions"><span id="jevSettingsStatus" role="status" aria-live="polite"></span><button type="button" id="packageTestSettings" class="btn btn-outline-secondary">测试连接</button><button type="button" id="packageSaveSettings" class="btn btn-primary">保存配置</button></div>
+</section>
+<link rel="stylesheet" href="/static/css/jev-settings.css?v=20260925-decision1">
+<script src="/static/js/jev-settings.js?v=20260925-decision1" defer></script>

@@ -1,0 +1,79 @@
+/* Match the system configuration page's monochrome cards and form rhythm. */
+#jevSettings {
+    color: var(--text-primary, #111);
+    background: var(--surface, #fff);
+    border: 1px solid var(--ai-border, #e5e7eb);
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgb(15 23 42 / 3%);
+}
+#jevSettings .jev-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 22px 24px;
+    border-bottom: 1px solid var(--border-color, #e5e7eb);
+}
+#jevSettings h3 { margin: 0 0 4px; font: inherit; font-size: 1rem; font-weight: 700; }
+#jevSettings p { margin: 0; font-size: .85rem; line-height: 1.7; color: var(--text-secondary, #6b7280); }
+#jevSettings .jev-toggle {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    gap: 10px;
+    position: relative;
+    margin: 0;
+    font-size: .82rem;
+    font-weight: 500;
+    cursor: pointer;
+}
+#jevSettings .jev-toggle input { position: absolute; opacity: 0; width: 36px; height: 22px; margin: 0; }
+#jevSettings .jev-switch { width: 36px; height: 22px; border-radius: 20px; background: #d1d5db; transition: background .15s; }
+#jevSettings .jev-switch::after { content: ""; display: block; width: 16px; height: 16px; margin: 3px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px #0002; transition: transform .15s; }
+#jevSettings input:checked + .jev-switch { background: #111; }
+#jevSettings input:checked + .jev-switch::after { transform: translateX(14px); }
+#jevSettings input:focus-visible + .jev-switch { outline: 2px solid #111; outline-offset: 3px; }
+#jevSettings .jev-form-body { padding: 24px; }
+#jevSettings .jev-fields { display: grid; gap: 20px; }
+#jevSettings .jev-connection-fields { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+#jevSettings .jev-request-fields { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+#jevSettings .jev-fields label { display: flex; flex-direction: column; gap: 8px; margin: 0; font-size: .85rem; font-weight: 500; text-transform: none; letter-spacing: normal; }
+#jevSettings input:not([type=checkbox]), #jevSettings select {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    height: 42px;
+    padding: 10px 12px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background: #fff;
+    color: #111;
+    font: inherit;
+    outline: none;
+    transition: border-color .15s, box-shadow .15s;
+}
+#jevSettings input:not([type=checkbox]):focus { border-color: #111; box-shadow: 0 0 0 3px #1111110a; }
+#jevSettings input::placeholder { color: #9ca3af; }
+#jevSettings small { color: var(--text-secondary, #6b7280); font-size: .75rem; font-weight: 400; line-height: 1.6; }
+#jevSettings .jev-section-label { border-top: 1px solid #eee; margin-top: 24px; padding-top: 22px; margin-bottom: 16px; font-size: .85rem; font-weight: 600; }
+#jevSettings .jev-note { margin-top: 24px; padding: 12px 14px; background: #f8f8f8; border-radius: 8px; font-size: .8rem; }
+#jevSettings .jev-actions { display: flex; align-items: center; justify-content: flex-end; gap: 16px; padding: 16px 24px; background: #fafafa; border-top: 1px solid #eee; }
+#jevSettings .jev-actions button { min-height: 40px; padding: 9px 18px; border: 1px solid #111; border-radius: 10px; background: #111; color: #fff; font: inherit; font-size: .85rem; font-weight: 600; cursor: pointer; }
+#jevSettings .jev-actions button:hover { background: #333; }
+#jevSettings #packageTestSettings { background: #fff; color: #111; border-color: #ddd; }
+#jevSettings #packageTestSettings:hover { background: #f3f4f6; border-color: #111; }
+#jevSettings .jev-actions button:disabled { opacity: .55; cursor: wait; }
+#jevSettings .jev-actions button { flex-shrink: 0; white-space: nowrap; }
+#jevSettings #jevSettingsStatus { font-size: .8rem; line-height: 1.5; }
+#jevSettings [data-error=true] { color: #b91c1c; }
+#jevSettings button:focus-visible { outline: 2px solid #111; outline-offset: 3px; }
+@media (max-width: 650px) {
+    #jevSettings .jev-heading { flex-direction: column; align-items: flex-start; gap: 18px; padding: 18px; }
+    #jevSettings .jev-form-body { padding: 18px; }
+    #jevSettings .jev-fields { grid-template-columns: 1fr; gap: 18px; }
+    #jevSettings .jev-actions { padding: 16px 18px; flex-wrap: wrap; }
+}
+@media (prefers-reduced-motion: reduce) {
+    #jevSettings *, #jevSettings *::after { transition: none; }
+}

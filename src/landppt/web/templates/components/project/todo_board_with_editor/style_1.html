@@ -606,6 +606,45 @@
         }
 
         @media (max-width: 768px) {
+            .header, .editor-toolbar {
+                padding: 18px;
+            }
+
+            .header-content, .editor-toolbar {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 18px;
+            }
+
+            .header-icon {
+                flex-shrink: 0;
+            }
+
+            .header h2 {
+                font-size: 1.25rem;
+                overflow-wrap: anywhere;
+            }
+
+            .header-controls {
+                justify-content: flex-end;
+            }
+
+            .toolbar-title h4 {
+                font-size: 1.1rem;
+            }
+
+            .editor-toolbar .btn-group-custom {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+            }
+
+            .editor-toolbar .btn-group-custom .btn {
+                padding: 10px 12px;
+                font-size: .82rem;
+                white-space: nowrap;
+            }
+
             .slides-container {
                 grid-template-columns: 1fr;
                 gap: 16px;

@@ -302,6 +302,12 @@ class SlideStreamingService:
             db_manager = DatabaseProjectManager()
 
             sent_indices = set()
+            project = await self.project_manager.get_project(project_id)
+            if project and (getattr(project, "project_metadata", None) or {}).get("generation_mode") == "package":
+                from .package_generation.follow import follow_package_generation
+                async for chunk in follow_package_generation(self._service, project_id):
+                    yield chunk
+                return
             last_keepalive = 0.0
             started_at = time.time()
             max_wait_seconds = 3 * 60 * 60  # 3h safety net
@@ -431,6 +437,8 @@ class SlideStreamingService:
             except Exception:
                 pass
 
+            if (getattr(project, "project_metadata", None) or {}).get("generation_mode") == "package":
+                needs_generation = True
             if needs_generation and (project_id not in self._slides_generation_tasks or self._slides_generation_tasks[project_id].done()):
                 lock_info = await self._try_acquire_slides_generation_lock(project_id)
                 if lock_info.get("acquired"):

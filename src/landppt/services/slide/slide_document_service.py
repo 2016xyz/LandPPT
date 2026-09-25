@@ -103,7 +103,7 @@ class SlideDocumentService:
             )
         return f"""\n    <!DOCTYPE html>\n    <html lang="zh-CN" style="height: 100%; display: flex; align-items: center; justify-content: center;">\n    <head>\n        <meta charset="UTF-8">\n        <meta name="viewport" content="width=device-width, initial-scale=1.0">\n        <title>{title}</title>\n        <style>\n            body {{\n                margin: 0;\n                padding: 0;\n                font-family: 'Microsoft YaHei', Arial, sans-serif;\n                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);\n                color: #2c3e50;\n                width: 1280px;\n                height: 720px;\n                position: relative;\n                overflow: hidden;\n            }}\n        </style>\n    </head>\n    <body>\n        {content_html}\n    </body>\n    </html>\n            """
 
-    def _combine_slides_to_full_html(self, slides_data: List[Dict[str, Any]], title: str) -> str:
+    def _combine_slides_to_full_html(self, slides_data: List[Dict[str, Any]], title: str, *, persist_files: bool = True) -> str:
         """Combine individual slides into a full presentation HTML and save to temp files"""
         try:
             if not slides_data:
@@ -113,7 +113,8 @@ class SlideDocumentService:
                 title = '未命名演示'
             presentation_id = f'presentation_{uuid.uuid4().hex[:8]}'
             temp_dir = Path(tempfile.gettempdir()) / 'landppt' / presentation_id
-            temp_dir.mkdir(parents=True, exist_ok=True)
+            if persist_files:
+                temp_dir.mkdir(parents=True, exist_ok=True)
             logger.info(f'Combining {len(slides_data)} slides into full HTML presentation')
             slide_files = []
             for i, slide in enumerate(slides_data):
@@ -121,8 +122,9 @@ class SlideDocumentService:
                 slide_filename = f'slide_{page_number}.html'
                 slide_path = temp_dir / slide_filename
                 html_content = slide.get('html_content', '<div>空内容</div>')
-                with open(slide_path, 'w', encoding='utf-8') as f:
-                    f.write(html_content)
+                if persist_files:
+                    with open(slide_path, 'w', encoding='utf-8') as f:
+                        f.write(html_content)
                 relative_path = f'{presentation_id}/{slide_filename}'
                 slide_files.append({'page_number': page_number, 'filename': slide_filename, 'relative_path': relative_path})
             slides_html = ''

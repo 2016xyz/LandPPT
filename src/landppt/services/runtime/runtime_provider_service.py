@@ -197,6 +197,7 @@ class RuntimeProviderService:
 
     async def _chat_completion_for_role(self, role: str, *, messages: List[AIMessage], **kwargs):
         """调用指定角色的模型进行对话补全"""
+        stream_response = kwargs.pop("stream_response", False)
         from .ai_execution import get_current_ai_conversation_id
         kwargs.setdefault("conversation_id", get_current_ai_conversation_id())
         if kwargs.get("conversation_id") is None:
@@ -213,4 +214,6 @@ class RuntimeProviderService:
                 kwargs.setdefault('temperature', ai_config.temperature)
                 kwargs.setdefault('top_p', ai_config.top_p)
         messages = SystemPrompts.normalize_messages_for_cache(messages)
+        if stream_response:
+            return await provider.collect_streamed_chat_completion(messages=messages, **kwargs)
         return await provider.chat_completion(messages=messages, **kwargs)

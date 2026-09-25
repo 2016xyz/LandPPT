@@ -1,0 +1,14 @@
+.template-management-heading { margin: 0 16px 20px; }
+.template-management-heading h1 { margin: 0 0 6px; font-size: 1.35rem; font-weight: 700; color: var(--text-primary, #111); }
+.template-management-heading p { margin: 0; font-size: .85rem; line-height: 1.65; color: var(--text-secondary, #6b7280); }
+.template-management-tabs { display: flex; gap: 8px; margin: 0 16px 24px; padding-bottom: 12px; border-bottom: 1px solid var(--border-color, #e5e7eb); }
+.template-management-tabs [role=tab] { min-height: 40px; padding: 9px 18px; border: 1px solid var(--border-color, #e5e7eb); border-radius: 10px; background: var(--surface, #fff); color: var(--text-secondary, #6b7280); font: inherit; font-size: .85rem; font-weight: 600; cursor: pointer; }
+.template-management-tabs [role=tab]:hover { background: #f5f5f5; color: #111; }
+.template-management-tabs [aria-selected=true] { background: #111; border-color: #111; color: #fff; }
+.template-management-tabs [aria-selected=true]:hover { background: #333; color: #fff; }
+.template-management-tabs [role=tab]:focus-visible { outline: 2px solid #111; outline-offset: 3px; }
+.template-management-panel[hidden] { display: none !important; }
+@media (max-width: 650px) {
+    .template-management-heading, .template-management-tabs { margin-left: 0; margin-right: 0; }
+    .template-management-tabs [role=tab] { flex: 1; padding: 9px 10px; }
+}

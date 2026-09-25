@@ -1,0 +1,15 @@
+<section class="package-panel" id="templatePackagePanel" data-mode="{{ package_panel_mode }}">
+    <header class="package-heading"><div><h2>{{ '选择模板包' if package_panel_mode == 'select' else '快速模式模板包' }}</h2><p>统一整套演示风格，自动匹配每一页的内容。</p></div>
+        <div class="package-tools"><label class="import-control">导入模板包<input type="file" id="packageImport" accept="application/json,.json" aria-label="导入模板包"></label><button type="button" id="packageInstall">添加内置模板包</button><button type="button" id="packageCreate" class="primary">AI 创建模板包</button></div>
+    </header>
+    <div class="package-options">
+        <label class="package-image-toggle"><input type="checkbox" id="packageImages"> 为内容自动配图</label>
+        <label>整套配图上限 <input type="number" id="packageBudget" min="0" max="40" value="6"></label>
+        <label class="package-filter">显示 <select id="packageFilter"><option value="all">全部版本</option><option value="published">可用版本</option><option value="draft">草稿</option><option value="retired">已停用</option></select></label>
+    </div>
+    <div class="package-status" id="packageStatus" role="status" aria-live="polite"></div>
+    <div class="package-grid" id="packageGrid"></div>
+    <div class="package-settings-link"><span>决策模型（如 Jev）可辅助匹配版式，也可使用默认匹配方式。</span><a href="/ai-config#jev-config">决策模型配置 <span aria-hidden="true">→</span></a></div>
+</section>
+<link rel="stylesheet" href="/static/css/template-packages.css?v=20260923-ui3">
+<script src="/static/js/template-packages.js?v=20260923-ui3" defer></script>

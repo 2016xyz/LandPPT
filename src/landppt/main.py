@@ -16,6 +16,7 @@ from .api.openai_compat import router as openai_router
 from .api.landppt_api import router as landppt_router
 from .api.database_api import router as database_router
 from .api.global_master_template_api import router as template_api_router
+from .api.template_package_api import router as template_package_router
 from .api.config_api import router as config_router
 from .api.image_api import router as image_router
 
@@ -121,6 +122,7 @@ app.include_router(community_router, tags=["Community Pages"])
 app.include_router(credits_router, tags=["Credits System"])
 app.include_router(openai_router, prefix="/v1", tags=["OpenAI Compatible"])
 app.include_router(landppt_router, prefix="/api", tags=["LandPPT API"])
+app.include_router(template_package_router)
 app.include_router(template_api_router, tags=["Global Master Templates"])
 app.include_router(database_router, tags=["Database Management"])
 

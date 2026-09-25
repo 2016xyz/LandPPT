@@ -40,6 +40,14 @@ class DatabaseConfigService:
     def __init__(self):
         # Configuration schema (same as original ConfigService)
         self.config_schema = {
+            "jev_enabled": {"type": "boolean", "category": "generation_params", "default": "false"},
+            "jev_api_key": {"type": "password", "category": "generation_params"},
+            "jev_model": {"type": "text", "category": "generation_params", "default": "jev-latest"},
+            "jev_endpoint_url": {"type": "text", "category": "generation_params", "default": "https://api.typesafe.ai/v1/systemone"},
+            "jev_protocol": {"type": "text", "category": "generation_params", "default": "jev"},
+            "jev_timeout": {"type": "number", "category": "generation_params", "default": "30"},
+            "jev_retries": {"type": "number", "category": "generation_params", "default": "2"},
+            "jev_concurrency": {"type": "number", "category": "generation_params", "default": "1"},
             # AI Provider Configuration
             "openai_api_key": {"type": "password", "category": "ai_providers"},
             "openai_base_url": {"type": "url", "category": "ai_providers", "default": "https://api.openai.com/v1"},

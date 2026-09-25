@@ -18,6 +18,7 @@
      Without it showOutlineSection() falls back to the first centred div, which is
      the hero band — dropping a 600px card inside an overflow:hidden banner. -->
 <div id="workspace-body"></div>
+{% include "components/project/generation_mode_entry.html" %}
 
 <!-- Requirements Confirmation Section -->
 {% set requirements_stage = todo_board.stages | selectattr('id', 'equalto', 'requirements_confirmation') | first %}

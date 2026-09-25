@@ -530,6 +530,13 @@ class OpenAIProvider(AIProvider):
             metadata={"provider": "openai", "transport": "responses"},
         )
     
+    async def collect_streamed_chat_completion(
+        self, messages: List[AIMessage], **kwargs
+    ) -> AIResponse:
+        from .streaming_completion import collect_openai_completion
+
+        return await collect_openai_completion(self, messages, **kwargs)
+
     async def chat_completion(self, messages: List[AIMessage], **kwargs) -> AIResponse:
         """Generate chat completion using OpenAI"""
         if not self.client:

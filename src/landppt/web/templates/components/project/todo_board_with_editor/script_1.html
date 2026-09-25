@@ -7,6 +7,7 @@
         let eventSource = null;
         let slidesData = [];
         const currentlyGeneratingPages = new Set();
+        let currentPhaseMessage = '';
         let lastKnownTotalSlides = null;
         let currentSlideIndex = 0;
 
@@ -16,6 +17,7 @@
         let reconnectDelay = 1000; // 初始重连延迟1秒
         let maxReconnectDelay = 30000; // 最大重连延迟30秒
         let connectionTimeout = null;
+        let reconnectTimeout = null;
         let heartbeatInterval = null;
         let isManualStop = false; // 标记是否为手动停止
         let isPaused = false; // 标记是否暂停生成
@@ -667,6 +669,10 @@
                 const meta = await fetchProjectMeta();
                 const metadata = meta.project_metadata || {};
 
+                if (metadata.generation_mode === 'package' || metadata.template_mode === 'package') {
+                    return true;
+                }
+
                 // 检测是否是自由模板：多种检测方式
                 let isFreeTemplate = metadata.template_mode === 'free';
 
@@ -895,8 +901,8 @@
                     } catch (_) {
                         templateMode = null;
                     }
-                    if (templateMode === 'free') {
-                        // Free template mode: skip global template selection check
+                    if (templateMode === 'free' || templateMode === 'package') {
+                        // These modes already have their own template confirmation.
                     } else {
                         const templateUrl = `/api/projects/{{ todo_board.task_id }}/selected-global-template`;
                         const templateResponse = await fetch(templateUrl);
@@ -1045,6 +1051,10 @@
         }
 
         function startEventSourceConnection() {
+            clearTimeout(reconnectTimeout);
+            clearTimeout(connectionTimeout);
+            stopHeartbeat();
+            if (eventSource) eventSource.close();
             // 显示连接状态
             updateConnectionStatus('connecting', '正在连接服务器...');
 
@@ -1061,8 +1071,10 @@
 
             // Start streaming
             eventSource = new EventSource('/api/projects/{{ todo_board.task_id }}/slides/stream');
+            const source = eventSource;
 
             eventSource.onopen = function (event) {
+                if (source !== eventSource || isManualStop || isPaused) return;
                 console.log('EventSource connection opened');
                 clearTimeout(connectionTimeout);
                 reconnectAttempts = 0; // 重置重连计数
@@ -1076,12 +1088,12 @@
             };
 
             eventSource.onmessage = function (event) {
+                if (source !== eventSource || isManualStop || isPaused) return;
                 try {
                     const data = JSON.parse(event.data);
-                    handleStreamData(data);
-
-                    // 重置心跳
+                    // Terminal events stop monitoring; never restart it afterwards.
                     resetHeartbeat();
+                    handleStreamData(data);
                 } catch (e) {
                     console.error('Error parsing stream data:', e);
                     console.error('Raw event data:', event.data);
@@ -1090,6 +1102,7 @@
             };
 
             eventSource.onerror = function (event) {
+                if (source !== eventSource || isManualStop || isPaused) return;
                 console.error('Stream error:', event);
                 console.error('EventSource readyState:', eventSource.readyState);
                 console.error('EventSource url:', eventSource.url);
@@ -1154,8 +1167,9 @@
             console.log(`Attempting reconnection ${reconnectAttempts}/${maxReconnectAttempts} in ${delay}ms`);
             updateConnectionStatus('reconnecting', `第 ${reconnectAttempts} 次重连中... (${Math.ceil(delay / 1000)}秒后)`);
 
-            setTimeout(() => {
-                if (!isManualStop) {
+            clearTimeout(reconnectTimeout);
+            reconnectTimeout = setTimeout(() => {
+                if (!isManualStop && !isPaused) {
                     startEventSourceConnection();
                 }
             }, delay);
@@ -1163,7 +1177,12 @@
 
         function startHeartbeat() {
             stopHeartbeat(); // 清除现有的心跳
+            if (isManualStop || isPaused) return;
             heartbeatInterval = setInterval(() => {
+                if (isManualStop || isPaused) {
+                    stopHeartbeat();
+                    return;
+                }
                 // 检查连接状态
                 if (eventSource && eventSource.readyState !== EventSource.OPEN) {
                     stopHeartbeat();
@@ -1204,11 +1223,7 @@
                 statusIndicator.innerHTML = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${dotColor};"></span> ${message}`;
             }
 
-            // 根据状态更新UI
-            const statusMessage = document.getElementById('statusMessage');
-            if (statusMessage && (status === 'error' || status === 'failed')) {
-                statusMessage.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${message}`;
-            }
+            // Connection badges must not overwrite page failures or completion details.
         }
 
         // 暂停生成
@@ -1358,11 +1373,14 @@
 
             switch (data.type) {
                 case 'progress':
-                    if (typeof data.current === 'number') {
+                    // 快速模式事件携带 completed（已完成数）与阶段消息，不代表具体页码
+                    if (typeof data.completed === 'number') {
+                        currentPhaseMessage = data.message || '';
+                    } else if (typeof data.current === 'number' && data.current >= 1) {
                         currentlyGeneratingPages.add(Number(data.current));
                     }
 
-                    updateProgressIndicators(data.total);
+                    updateProgressIndicators(data.total, data.completed);
                     break;
 
                 case 'slide':
@@ -1418,10 +1436,10 @@
 
                 case 'complete':
                     currentlyGeneratingPages.clear();
-                    updateProgressIndicators(data.total);
+                    updateProgressIndicators(data.total, data.succeeded);
 
                     updateStatus(data.message, data.partial ? 'error' : 'complete');
-                    progressBar.style.width = '100%';
+                    if (!data.partial) progressBar.style.width = '100%';
 
                     // 标记为手动停止，防止重连
                     isManualStop = true;
@@ -1434,6 +1452,7 @@
                     // 停止心跳和清理定时器
                     stopHeartbeat();
                     clearTimeout(connectionTimeout);
+                    clearTimeout(reconnectTimeout);
 
                     // 更新连接状态
                     updateConnectionStatus(data.partial ? 'error' : 'completed', data.partial ? '部分页面待重新生成' : '生成完成');
@@ -1449,6 +1468,17 @@
                     // 清除生成标志，允许下次重新生成
                     sessionStorage.removeItem(generationKey);
                     releaseStartGenerationLock();
+                    generationStarted = false;
+                    currentPhaseMessage = '';
+                    for (const id of ['stopBtn', 'pauseBtn', 'resumeBtn']) {
+                        const button = document.getElementById(id);
+                        if (button) button.style.display = 'none';
+                    }
+                    const retryBtn = document.getElementById('startBtn');
+                    if (retryBtn) {
+                        retryBtn.style.display = data.partial && !unattendedActive ? 'inline-block' : 'none';
+                        retryBtn.textContent = '补生成失败页';
+                    }
 
                     break;
 
@@ -1471,6 +1501,7 @@
                     // 停止心跳和清理定时器
                     stopHeartbeat();
                     clearTimeout(connectionTimeout);
+                    clearTimeout(reconnectTimeout);
 
                     // Reset generation state to allow retry
                     generationStarted = false;
@@ -1505,7 +1536,7 @@
 
         function updateStatus(message, type) {
             const statusMessage = document.getElementById('statusMessage');
-            statusMessage.innerHTML = message;
+            statusMessage.textContent = message;
 
             const statusDiv = document.getElementById('generationStatus');
             statusDiv.className = 'status-indicator';
@@ -1593,11 +1624,14 @@
             return ranges.join('、');
         }
 
-        function updateProgressIndicators(totalFromEvent) {
+        function updateProgressIndicators(totalFromEvent, completedFromEvent) {
             const totalSlides = estimateTotalSlides(totalFromEvent);
             pruneGeneratingPages();
 
-            const completedSlides = getCompletedSlidesCount();
+            // 快速模式以服务端可用页面数为准；本地可能仍有待重生成的旧预览。
+            const completedSlides = Number.isInteger(completedFromEvent) && completedFromEvent >= 0
+                ? Math.min(completedFromEvent, totalSlides || completedFromEvent)
+                : getCompletedSlidesCount();
             const activePages = Array.from(currentlyGeneratingPages).sort((a, b) => a - b);
 
             const progressBar = document.getElementById('generationProgress');
@@ -1619,6 +1653,8 @@
 
             if (activePages.length > 0) {
                 statusText += `，正在生成第${formatPageRanges(activePages)}页`;
+            } else if (currentPhaseMessage && completedSlides < (totalSlides || Infinity)) {
+                statusText += `，${currentPhaseMessage}`;
             }
 
             statusText += ')';

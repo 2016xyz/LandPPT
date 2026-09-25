@@ -1,0 +1,60 @@
+/* Use the surrounding template and generator pages' existing theme tokens. */
+.generation-mode-picker {
+    margin: 0 16px 28px;
+    color: var(--text-primary, #111);
+}
+.generation-mode-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.generation-mode-picker h1 { margin: 0; font-size: 1.15rem; font-weight: 700; }
+.generation-mode-picker a, .generation-mode-entry a { color: var(--text-primary, #111); font-size: .82rem; font-weight: 500; text-decoration: none; }
+.generation-mode-heading a { color: var(--text-secondary, #6b7280); }
+.generation-mode-picker a:hover, .generation-mode-entry a:hover { color: #111; text-decoration: underline; text-underline-offset: 3px; }
+.generation-mode-options { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.generation-mode-options button {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 18px 20px 18px 48px;
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 12px;
+    text-align: left;
+    background: #fff;
+    color: var(--text-primary, #111);
+    font: inherit;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+}
+.generation-mode-options button::before { content: ""; position: absolute; left: 20px; top: 22px; width: 16px; height: 16px; box-sizing: border-box; border: 1px solid #cbd0d6; border-radius: 50%; background: #fff; }
+.generation-mode-options button:hover { border-color: #999; background: #fafafa; }
+.generation-mode-options [aria-pressed=true] { border-color: #111; box-shadow: inset 0 0 0 1px #111; background: #fafafa; }
+.generation-mode-options [aria-pressed=true]::before { border: 5px solid #111; }
+.generation-mode-options strong { font-size: .95rem; font-weight: 600; }
+.generation-mode-options span, .generation-mode-picker p, .generation-mode-entry p { font-size: .82rem; line-height: 1.7; color: var(--text-secondary, #6b7280); }
+.generation-mode-picker p { margin: 10px 0 0; }
+.generation-mode-entry {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    padding: 16px 24px;
+    margin: 0;
+    background: var(--surface, #fff);
+    border-bottom: 1px solid var(--border-color, #e5e7eb);
+    color: var(--text-primary, #111);
+}
+.generation-mode-entry strong { font-size: .88rem; font-weight: 600; }
+.generation-mode-entry p { margin: 3px 0 0; }
+.generation-mode-entry-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.generation-mode-entry-actions a { display: inline-flex; align-items: center; min-height: 36px; padding: 7px 12px; border: 1px solid var(--border-color, #e5e7eb); border-radius: 10px; background: #fff; }
+.generation-mode-entry-actions a:hover { background: #f5f5f5; text-decoration: none; }
+.generation-mode-entry-actions span { font-size: .82rem; color: #6b7280; }
+.generation-mode-picker :focus-visible, .generation-mode-entry :focus-visible { outline: 2px solid #111; outline-offset: 3px; }
+#templatePackagePanel[hidden], #regularTemplatePanel[hidden] { display: none !important; }
+@media (max-width: 650px) {
+    .generation-mode-picker { margin: 0 0 24px; }
+    .generation-mode-heading { align-items: flex-start; flex-wrap: wrap; gap: 8px; }
+    .generation-mode-options { grid-template-columns: 1fr; gap: 10px; }
+    .generation-mode-entry { align-items: flex-start; flex-direction: column; gap: 12px; padding: 16px 18px; }
+}
+@media (prefers-reduced-motion: reduce) { .generation-mode-options button { transition: none; } }
+

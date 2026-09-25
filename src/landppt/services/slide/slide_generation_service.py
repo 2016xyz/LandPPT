@@ -31,6 +31,11 @@ class SlideGenerationService:
                 cache = None
 
                 project = await self.project_manager.get_project(project_id)
+                if project and (getattr(project, "project_metadata", None) or {}).get("generation_mode") == "package":
+                    from .package_generation.workflow import PackageWorkflow
+                    async for chunk in PackageWorkflow(self._service).run(project_id):
+                        yield chunk
+                    return
                 if not project:
                     error_data = {'error': '项目未找到'}
                     yield f"data: {json.dumps(error_data)}\n\n"

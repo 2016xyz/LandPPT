@@ -30,6 +30,9 @@
             <button class="tab-btn" onclick="switchTab('generation-params')" data-tab="generation-params">
                 生成参数
             </button>
+            <button class="tab-btn" onclick="switchTab('jev-config')" data-tab="jev-config">
+                决策模型配置
+            </button>
             {% if user and user.is_admin %}
             <button class="tab-btn" onclick="switchTab('app-config')" data-tab="app-config">
                 应用配置
@@ -39,6 +42,10 @@
                 图片服务
             </button>
         </div>
+    </div>
+
+    <div id="jev-config" class="tab-content" style="display: none;">
+        {% include "components/settings/jev_settings.html" %}
     </div>
 
     <!-- AI 提供者配置标签页 -->

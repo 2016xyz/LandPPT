@@ -3,17 +3,31 @@
 {% block title %}选择PPT模板{% endblock %}
 
 {% block extra_css %}
+<link rel="stylesheet" href="/static/css/generation-mode.css?v=20260923-ui3">
 <style>
 {% include "components/template/template_selection/extra_css_1.html" %}
 </style>
 {% endblock %}
 
 {% block content %}
+<section class="generation-mode-picker" aria-labelledby="generationModeTitle">
+    <div class="generation-mode-heading"><h1 id="generationModeTitle">选择生成方式</h1><a href="/ai-config#jev-config">决策模型配置 <span aria-hidden="true">↗</span></a></div>
+    <div class="generation-mode-options">
+        <button type="button" data-generation-mode="freeform" aria-pressed="true" aria-controls="regularTemplatePanel"><strong>自由设计</strong><span>逐页设计，自由表达内容与风格</span></button>
+        <button type="button" data-generation-mode="package" aria-pressed="false" aria-controls="templatePackagePanel"><strong>快速模式生成</strong><span>先编写内容，再匹配整套模板版式</span></button>
+    </div>
+    <p id="generationModeHint" role="status">选择下方模板后开始生成。</p>
+</section>
+{% set package_panel_mode = 'select' %}
+{% include "components/template/package_panel.html" %}
+<div id="regularTemplatePanel">
 {% include "components/template/template_selection/content_1.html" %}
+</div>
 <style>
 {% include "components/template/template_selection/content_style_1.html" %}
 </style>
 <script>
 {% include "components/template/template_selection/content_script_1.html" %}
 </script>
+<script src="/static/js/generation-mode-picker.js?v=20260923-entry2" defer></script>
 {% endblock %}

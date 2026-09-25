@@ -176,6 +176,10 @@ class ProjectRepository:
             return False
         
         try:
+            from .models import PackagePageState, PackageProjectState, SlideContentRevision
+            for package_model in (PackagePageState, SlideContentRevision, PackageProjectState):
+                await self.session.execute(delete(package_model).where(package_model.project_id == project_id))
+
             # Delete related records in order (child tables first)
             # 1. Delete todo_stages (references todo_boards and projects)
             await self.session.execute(
@@ -717,7 +721,7 @@ class GlobalMasterTemplateRepository:
 
     async def get_all_templates(self, active_only: bool = True, user_id: Optional[int] = None) -> List[GlobalMasterTemplate]:
         """Get all global master templates"""
-        stmt = select(GlobalMasterTemplate)
+        stmt = select(GlobalMasterTemplate).where(GlobalMasterTemplate.template_kind == "single")
         stmt = self._apply_visibility_scope(stmt, user_id, include_system=True)
         if active_only:
             stmt = stmt.where(GlobalMasterTemplate.is_active == True)
@@ -732,7 +736,7 @@ class GlobalMasterTemplateRepository:
         user_id: Optional[int] = None,
     ) -> List[GlobalMasterTemplate]:
         """Get templates by tags"""
-        stmt = select(GlobalMasterTemplate)
+        stmt = select(GlobalMasterTemplate).where(GlobalMasterTemplate.template_kind == "single")
         stmt = self._apply_visibility_scope(stmt, user_id, include_system=True)
         if active_only:
             stmt = stmt.where(GlobalMasterTemplate.is_active == True)
@@ -755,8 +759,8 @@ class GlobalMasterTemplateRepository:
     ) -> Tuple[List[GlobalMasterTemplate], int]:
         """Get templates with pagination"""
         # Base query
-        stmt = select(GlobalMasterTemplate)
-        count_stmt = select(func.count(GlobalMasterTemplate.id))
+        stmt = select(GlobalMasterTemplate).where(GlobalMasterTemplate.template_kind == "single")
+        count_stmt = select(func.count(GlobalMasterTemplate.id)).where(GlobalMasterTemplate.template_kind == "single")
         stmt = self._apply_visibility_scope(stmt, user_id, include_system=True)
         count_stmt = self._apply_visibility_scope(count_stmt, user_id, include_system=True)
 
@@ -799,8 +803,8 @@ class GlobalMasterTemplateRepository:
     ) -> Tuple[List[GlobalMasterTemplate], int]:
         """Get templates by tags with pagination"""
         # Base query
-        stmt = select(GlobalMasterTemplate)
-        count_stmt = select(func.count(GlobalMasterTemplate.id))
+        stmt = select(GlobalMasterTemplate).where(GlobalMasterTemplate.template_kind == "single")
+        count_stmt = select(func.count(GlobalMasterTemplate.id)).where(GlobalMasterTemplate.template_kind == "single")
         stmt = self._apply_visibility_scope(stmt, user_id, include_system=True)
         count_stmt = self._apply_visibility_scope(count_stmt, user_id, include_system=True)
 
@@ -845,7 +849,7 @@ class GlobalMasterTemplateRepository:
         """Update a global master template"""
         effective_user_id = _effective_user_id(user_id)
         update_data['updated_at'] = time.time()
-        stmt = update(GlobalMasterTemplate).where(GlobalMasterTemplate.id == template_id)
+        stmt = update(GlobalMasterTemplate).where(GlobalMasterTemplate.id == template_id, GlobalMasterTemplate.template_kind == "single")
         if effective_user_id is not None:
             if allow_system_write:
                 # Admin scoped write: allow own templates + system templates.
@@ -872,7 +876,7 @@ class GlobalMasterTemplateRepository:
         """Delete a global master template"""
         try:
             effective_user_id = _effective_user_id(user_id)
-            stmt = delete(GlobalMasterTemplate).where(GlobalMasterTemplate.id == template_id)
+            stmt = delete(GlobalMasterTemplate).where(GlobalMasterTemplate.id == template_id, GlobalMasterTemplate.template_kind == "single")
             if effective_user_id is not None:
                 if allow_system_write:
                     # Admin scoped write: allow own templates + system templates.
@@ -900,7 +904,7 @@ class GlobalMasterTemplateRepository:
     async def increment_usage_count(self, template_id: int, user_id: Optional[int] = None) -> bool:
         """Increment template usage count"""
         effective_user_id = _effective_user_id(user_id)
-        stmt = update(GlobalMasterTemplate).where(GlobalMasterTemplate.id == template_id)
+        stmt = update(GlobalMasterTemplate).where(GlobalMasterTemplate.id == template_id, GlobalMasterTemplate.template_kind == "single")
         if effective_user_id is not None:
             # Usage can be tracked for both user-owned and system templates.
             stmt = stmt.where(
@@ -932,7 +936,7 @@ class GlobalMasterTemplateRepository:
             stmt = update(GlobalMasterTemplate).values(is_default=False, updated_at=now)
             await self.session.execute(stmt)
 
-            stmt = update(GlobalMasterTemplate).where(GlobalMasterTemplate.id == template_id).values(
+            stmt = update(GlobalMasterTemplate).where(GlobalMasterTemplate.id == template_id, GlobalMasterTemplate.template_kind == "single").values(
                 is_default=True,
                 updated_at=now
             )

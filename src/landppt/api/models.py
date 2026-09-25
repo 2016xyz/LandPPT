@@ -255,6 +255,7 @@ class GlobalMasterTemplateUpdate(BaseModel):
 class GlobalMasterTemplateResponse(BaseModel):
     """Response model for global master template"""
     id: int
+    template_kind: str = "single"
     user_id: Optional[int] = None
     template_name: str
     description: str

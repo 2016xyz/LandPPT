@@ -15,6 +15,7 @@
             initAnthropicReasoningControls();
             pruneEmptyProviderFormGroups();
             bindSearxngHostSync();
+            if (window.location.hash === '#jev-config') switchTab('jev-config');
         });
 
         // “研究功能”与“图片服务”两个标签页各有一个 searxng_host 输入框，

@@ -186,6 +186,28 @@ class DatabaseMigration:
             "down": self._migration_018_down,
         })
 
+        self.migrations.append({
+            "version": "019",
+            "name": "add_template_packages",
+            "description": "Versioned packages and resumable structured page content",
+            "up": self._migration_019_up,
+            "down": self._migration_019_down,
+        })
+
+    async def _migration_019_up(self, session: AsyncSession):
+        from .models import TemplatePackageVersion, PackageProjectState, PackagePageState, SlideContentRevision
+        if not await self._column_exists(session, "global_master_templates", "template_kind"):
+            await session.execute(text(
+                "ALTER TABLE global_master_templates ADD COLUMN template_kind VARCHAR(20) NOT NULL DEFAULT 'single'"
+            ))
+        connection = await session.connection()
+        for model in (TemplatePackageVersion, PackageProjectState, PackagePageState, SlideContentRevision):
+            await connection.run_sync(lambda conn, table=model.__table__: table.create(conn, checkfirst=True))
+
+    async def _migration_019_down(self, session: AsyncSession):
+        # Published versions and user content must survive a code rollback.
+        raise RuntimeError("Migration 019 contains user content; automatic rollback is disabled")
+
     @staticmethod
     def _dialect_name(session: AsyncSession) -> str:
         try:

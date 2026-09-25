@@ -3,13 +3,26 @@
 {% block title %}模板管理{% endblock %}
 
 {% block extra_css %}
+<link rel="stylesheet" href="/static/css/template-management-tabs.css?v=20260923-tabs1">
 <style>
 {% include "components/template/global_master_templates/extra_css_1.html" %}
 </style>
 {% endblock %}
 
 {% block content %}
+<div class="template-management-heading"><h1>模板管理</h1><p>管理逐页设计使用的普通模板，以及快速生成使用的整套模板包。</p></div>
+<div class="template-management-tabs" role="tablist" aria-label="模板类型">
+    <button type="button" id="regularTemplatesTab" role="tab" aria-selected="true" aria-controls="regularTemplatesPanel" data-template-tab="regular">普通模板</button>
+    <button type="button" id="packageTemplatesTab" role="tab" aria-selected="false" aria-controls="packageTemplatesPanel" data-template-tab="packages" tabindex="-1">快速模式模板包</button>
+</div>
+<section id="regularTemplatesPanel" class="template-management-panel" role="tabpanel" aria-labelledby="regularTemplatesTab">
 {% include "components/template/global_master_templates/content_1.html" %}
+</section>
+<section id="packageTemplatesPanel" class="template-management-panel" role="tabpanel" aria-labelledby="packageTemplatesTab" hidden>
+{% set package_panel_mode = 'manage' %}
+{% include "components/template/package_panel.html" %}
+</section>
+<script src="/static/js/template-management-tabs.js?v=20260923-tabs1" defer></script>
 <style>
 {% include "components/template/global_master_templates/content_style_1.html" %}
 </style>

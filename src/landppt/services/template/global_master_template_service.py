@@ -214,6 +214,7 @@ class GlobalMasterTemplateService:
 
                 return {
                     "id": template.id,
+                    "template_kind": getattr(template, "template_kind", "single"),
                     "user_id": template.user_id,
                     "template_name": template.template_name,
                     "description": template.description,
@@ -247,6 +248,7 @@ class GlobalMasterTemplateService:
                 return [
                     {
                         "id": template.id,
+                        "template_kind": getattr(template, "template_kind", "single"),
                         "user_id": template.user_id,
                         "template_name": template.template_name,
                         "description": template.description,
@@ -298,6 +300,7 @@ class GlobalMasterTemplateService:
                 template_list = [
                     {
                         "id": template.id,
+                        "template_kind": getattr(template, "template_kind", "single"),
                         "user_id": template.user_id,
                         "template_name": template.template_name,
                         "description": template.description,
@@ -343,6 +346,7 @@ class GlobalMasterTemplateService:
 
                 return {
                     "id": template.id,
+                    "template_kind": getattr(template, "template_kind", "single"),
                     "user_id": template.user_id,
                     "template_name": template.template_name,
                     "description": template.description,
@@ -439,6 +443,9 @@ class GlobalMasterTemplateService:
 
     async def set_default_template(self, template_id: int) -> bool:
         """Set a template as default"""
+        template = await self.get_template_by_id(template_id)
+        if template and template.get("template_kind") == "package":
+            raise ValueError("模板包需要为项目选择具体版本，不能作为普通默认模板")
         try:
             async with AsyncSessionLocal() as session:
                 db_service = DatabaseService(session)
@@ -464,6 +471,7 @@ class GlobalMasterTemplateService:
 
                 return {
                     "id": template.id,
+                    "template_kind": getattr(template, "template_kind", "single"),
                     "user_id": template.user_id,
                     "template_name": template.template_name,
                     "description": template.description,
@@ -2326,6 +2334,7 @@ class GlobalMasterTemplateService:
                 return [
                     {
                         "id": template.id,
+                        "template_kind": getattr(template, "template_kind", "single"),
                         "user_id": template.user_id,
                         "template_name": template.template_name,
                         "description": template.description,
@@ -2379,6 +2388,7 @@ class GlobalMasterTemplateService:
                 template_list = [
                     {
                         "id": template.id,
+                        "template_kind": getattr(template, "template_kind", "single"),
                         "user_id": template.user_id,
                         "template_name": template.template_name,
                         "description": template.description,

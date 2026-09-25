@@ -304,6 +304,7 @@ class GlobalMasterTemplate(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     user_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     template_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    template_kind: Mapped[str] = mapped_column(String(20), default="single", server_default="single", nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=True)
     html_template: Mapped[str] = mapped_column(Text, nullable=False)
     preview_image: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # Base64 encoded preview image
@@ -315,6 +316,65 @@ class GlobalMasterTemplate(Base):
     created_by: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)  # 创建者
     created_at: Mapped[float] = mapped_column(Float, default=time.time)
     updated_at: Mapped[float] = mapped_column(Float, default=time.time, onupdate=time.time)
+
+
+class TemplatePackageVersion(Base):
+    __tablename__ = "template_package_versions"
+    __table_args__ = (UniqueConstraint("template_id", "version", name="uq_package_version"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    template_id: Mapped[int] = mapped_column(ForeignKey("global_master_templates.id"), index=True)
+    version: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(20), default="draft")
+    manifest: Mapped[Dict[str, Any]] = mapped_column(JSON)
+    content_hash: Mapped[str] = mapped_column(String(64))
+    validation_report: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[float] = mapped_column(Float, default=time.time)
+
+
+class PackageProjectState(Base):
+    __tablename__ = "package_project_states"
+
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.project_id", ondelete="CASCADE"), primary_key=True)
+    version_id: Mapped[int] = mapped_column(ForeignKey("template_package_versions.id"))
+    options: Mapped[Dict[str, Any]] = mapped_column(JSON, default=dict)
+    run_token: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    lease_until: Mapped[float] = mapped_column(Float, default=0)
+
+
+class PackagePageState(Base):
+    __tablename__ = "package_page_states"
+    __table_args__ = (UniqueConstraint("project_id", "slide_id", name="uq_package_page"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.project_id", ondelete="CASCADE"), index=True)
+    slide_id: Mapped[str] = mapped_column(String(100))
+    slide_index: Mapped[int] = mapped_column(Integer)
+    revision: Mapped[int] = mapped_column(Integer, default=0)
+    content_revision: Mapped[int] = mapped_column(Integer, default=0)
+    fingerprint: Mapped[str] = mapped_column(String(64), default="")
+    component_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    assets: Mapped[Dict[str, Any]] = mapped_column(JSON, default=dict)
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    manual: Mapped[bool] = mapped_column(Boolean, default=False)
+    locked: Mapped[bool] = mapped_column(Boolean, default=False)
+    billed_revision: Mapped[int] = mapped_column(Integer, default=0)
+    history: Mapped[List[Dict[str, Any]]] = mapped_column(JSON, default=list)
+
+
+class SlideContentRevision(Base):
+    __tablename__ = "slide_content_revisions"
+    __table_args__ = (UniqueConstraint("project_id", "slide_id", "revision", name="uq_slide_content_revision"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.project_id", ondelete="CASCADE"), index=True)
+    slide_id: Mapped[str] = mapped_column(String(100))
+    revision: Mapped[int] = mapped_column(Integer)
+    fingerprint: Mapped[str] = mapped_column(String(64))
+    content: Mapped[Dict[str, Any]] = mapped_column(JSON)
+    usage: Mapped[Dict[str, Any]] = mapped_column(JSON, default=dict)
+    created_at: Mapped[float] = mapped_column(Float, default=time.time)
 
 
 class SpeechScript(Base):

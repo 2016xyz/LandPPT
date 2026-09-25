@@ -39,6 +39,37 @@ class PPTImageProcessor:
         self._search_cache = {}
         self._search_lock = asyncio.Lock()
 
+    async def process_package_images(self, content, requirements, page_number, total_pages):
+        """Resolve an already-approved image plan without re-analysing its count."""
+        from .db_config_service import get_db_config_service
+        config = await get_db_config_service().get_config_by_category("image_service", user_id=self.user_id)
+        if not config.get("enable_image_service"):
+            raise ValueError("图片服务未启用")
+        sources = self._get_enabled_image_sources(config)
+        resolved = {}
+        body = "\n".join(block.body for block in content.blocks)
+        topic = requirements.get("topic", "")
+        scenario = requirements.get("scenario", "general")
+        for visual in content.visual_briefs:
+            for source in sources:
+                if self._clamp_requirement_count(source, 1, config, 1) < 1:
+                    continue
+                plan = ImageRequirement(source=source, count=1, purpose=ImagePurpose.ILLUSTRATION,
+                    description=visual.brief, search_keywords=visual.brief, width=1280, height=800,
+                    generation_prompts=[visual.brief])
+                if source == ImageSource.LOCAL:
+                    images = await self._process_local_images(plan, topic, scenario, content.title, body)
+                elif source == ImageSource.NETWORK:
+                    images = await self._process_network_images(plan, topic, scenario, content.title, body, config)
+                else:
+                    images = await self._process_ai_generated_images(plan, topic, scenario, content.title, body, config, page_number, total_pages, "")
+                if images:
+                    resolved[visual.id] = images[0].absolute_url
+                    break
+            if visual.id not in resolved:
+                raise ValueError(f"未能获取配图：{visual.id}")
+        return resolved
+
     async def _text_completion(self, *, prompt: str, **kwargs):
         """调用角色为图片分析的模型"""
         # 优先使用用户数据库配置获取模型设置

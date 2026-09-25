@@ -1,0 +1,14 @@
+{% set fast_mode = project and project.project_metadata and project.project_metadata.get('generation_mode') == 'package' %}
+<section class="generation-mode-entry" aria-label="页面生成方式">
+    <div><strong>生成方式：{{ '快速模式（模板包）' if fast_mode else '自由设计' }}</strong>
+        <p>{{ '先编写内容，再自动匹配模板版式。' if fast_mode else '逐页设计，自由表达内容与风格。' }}</p>
+    </div>
+    <div class="generation-mode-entry-actions">
+        {% if project and project.outline and project.outline.get('slides') %}
+        <a href="/projects/{{ project.project_id }}/template-selection?mode=package">{{ '快速模式设置' if fast_mode else '切换到快速模式' }}</a>
+        {% if fast_mode %}<a href="/projects/{{ project.project_id }}/template-selection?mode=freeform">切换到自由设计</a>{% endif %}
+        {% else %}<span>确认大纲后可选择快速模式</span>{% endif %}
+        <a href="/ai-config#jev-config">决策模型配置</a>
+    </div>
+</section>
+<link rel="stylesheet" href="/static/css/generation-mode.css?v=20260923-ui3">

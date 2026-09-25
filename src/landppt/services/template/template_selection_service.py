@@ -267,6 +267,8 @@ class TemplateSelectionService:
             project_metadata = project.project_metadata or {}
             project_metadata["selected_global_template_id"] = template_id
             project_metadata["template_mode"] = "global"
+            project_metadata["generation_mode"] = "freeform"
+            project_metadata.pop("selected_package_version_id", None)
 
             await self.project_manager.update_project_metadata(project_id, project_metadata)
             self.clear_cached_style_genes(project_id)
@@ -292,6 +294,8 @@ class TemplateSelectionService:
                     raise ValueError(f"Template {template_id} not found")
                 if not template.get("is_active", True):
                     raise ValueError(f"Template {template_id} is not active")
+                if template.get("template_kind") == "package":
+                    raise ValueError("请从模板包入口选择已发布的版本")
             else:
                 template = await self.global_template_service.get_default_template()
                 if not template:
@@ -331,6 +335,8 @@ class TemplateSelectionService:
             )
             project_metadata["template_mode"] = "free"
             project_metadata.pop("selected_global_template_id", None)
+            project_metadata["generation_mode"] = "freeform"
+            project_metadata.pop("selected_package_version_id", None)
             project_metadata["free_template_status"] = "ready" if has_existing_free_template else "pending"
 
             await self.project_manager.update_project_metadata(project_id, project_metadata)

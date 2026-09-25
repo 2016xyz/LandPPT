@@ -3,6 +3,7 @@ Base classes for AI providers
 """
 
 from abc import ABC, abstractmethod
+from contextlib import aclosing
 from typing import List, Dict, Any, Optional, AsyncGenerator, Union
 from pydantic import BaseModel, Field
 from enum import Enum
@@ -90,6 +91,24 @@ class AIProvider(ABC):
         # Default implementation: return full response at once
         response = await self.text_completion(prompt, **kwargs)
         yield response.content
+
+    async def collect_streamed_chat_completion(
+        self, messages: List[AIMessage], **kwargs
+    ) -> AIResponse:
+        """Collect a provider's text stream; unavailable usage is not estimated."""
+        chunks = []
+        async with aclosing(self.stream_chat_completion(messages, **kwargs)) as stream:
+            async for chunk in stream:
+                chunks.append(chunk)
+        content = "".join(chunks)
+        if not content.strip():
+            raise ValueError("模型流式响应为空")
+        return AIResponse(
+            content=content,
+            model=kwargs.get("model") or self.model,
+            usage={},
+            metadata={"streamed": True, "usage_available": False},
+        )
     
     def get_model_info(self) -> Dict[str, Any]:
         """Get model information"""
