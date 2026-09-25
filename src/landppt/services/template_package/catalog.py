@@ -2,10 +2,14 @@
 
 import asyncio
 
-from sqlalchemy import or_, select, update
+from sqlalchemy import delete, func, or_, select, update
 
 from ...database.database import AsyncSessionLocal
-from ...database.models import GlobalMasterTemplate, TemplatePackageVersion
+from ...database.models import (
+    GlobalMasterTemplate,
+    PackageProjectState,
+    TemplatePackageVersion,
+)
 from .builtin import load_builtin_package
 from .schemas import TemplatePackage
 from .service import validate_package
@@ -27,9 +31,14 @@ class PackageCatalog:
         self.sessions = session_factory or AsyncSessionLocal
 
     def scope(self):
-        return or_(
-            GlobalMasterTemplate.user_id == self.user_id,
-            GlobalMasterTemplate.user_id.is_(None),
+        # Deleted packages still referenced by projects are hidden, not removed.
+        return (
+            or_(
+                GlobalMasterTemplate.user_id == self.user_id,
+                GlobalMasterTemplate.user_id.is_(None),
+            )
+            & GlobalMasterTemplate.is_active.isnot(False)
+            & (GlobalMasterTemplate.template_kind == "package")
         )
 
     @staticmethod
@@ -45,6 +54,9 @@ class PackageCatalog:
             "manifest": version.manifest,
             "validation_report": version.validation_report,
             "user_id": template.user_id,
+            "editable": bool(
+                template.user_id and version.status in {"draft", "validated"}
+            ),
         }
 
     async def list(self):
@@ -106,25 +118,7 @@ class PackageCatalog:
                 await session.flush()
                 version_number = 1
             else:
-                await session.execute(
-                    update(GlobalMasterTemplate)
-                    .where(
-                        GlobalMasterTemplate.id == template_id,
-                        GlobalMasterTemplate.user_id == self.user_id,
-                    )
-                    .values(updated_at=GlobalMasterTemplate.updated_at)
-                )
-                template = await session.scalar(
-                    select(GlobalMasterTemplate)
-                    .where(
-                        GlobalMasterTemplate.id == template_id,
-                        GlobalMasterTemplate.user_id == self.user_id,
-                        GlobalMasterTemplate.template_kind == "package",
-                    )
-                    .with_for_update()
-                )
-                if not template:
-                    raise PackageNotFound("模板包不存在或不可修改")
+                template = await self._owned_template(session, template_id)
                 versions = (
                     await session.scalars(
                         select(TemplatePackageVersion)
@@ -139,7 +133,11 @@ class PackageCatalog:
                 ):
                     raise PackageConflict("新版本必须保留模板包标识")
             manifest = TemplatePackage.model_validate(
-                {**manifest.model_dump(), "version": version_number}
+                {
+                    **manifest.model_dump(),
+                    "version": version_number,
+                    "name": template.template_name,
+                }
             )
             row = TemplatePackageVersion(
                 template_id=template.id,
@@ -162,9 +160,12 @@ class PackageCatalog:
                 validate_package, TemplatePackage.model_validate(snapshot["manifest"])
             )
         async with self.sessions() as session, session.begin():
+            await self._owned_template(session, snapshot["template_id"])
             row = await session.get(
                 TemplatePackageVersion, version_id, with_for_update=True
             )
+            if row is None:
+                raise PackageNotFound("模板包版本不存在")
             if row.content_hash != snapshot["content_hash"]:
                 raise PackageConflict("版本已发生变化，请重新校验")
             allowed = {
@@ -193,3 +194,178 @@ class PackageCatalog:
                 return row
         row = await self.create(load_builtin_package())
         return await self.transition(row["id"], "publish")
+
+    async def _owned_template(self, session, template_id):
+        # Serialize all catalog mutations in the same parent-then-version order,
+        # including SQLite, where SELECT FOR UPDATE has no locking effect.
+        await session.execute(
+            update(GlobalMasterTemplate)
+            .where(
+                GlobalMasterTemplate.id == template_id,
+                GlobalMasterTemplate.user_id == self.user_id,
+                GlobalMasterTemplate.template_kind == "package",
+                GlobalMasterTemplate.is_active.isnot(False),
+            )
+            .values(updated_at=GlobalMasterTemplate.updated_at)
+        )
+        template = await session.scalar(
+            select(GlobalMasterTemplate)
+            .where(
+                GlobalMasterTemplate.id == template_id,
+                GlobalMasterTemplate.user_id == self.user_id,
+                GlobalMasterTemplate.template_kind == "package",
+                GlobalMasterTemplate.is_active.isnot(False),
+            )
+            .with_for_update()
+        )
+        if not template:
+            raise PackageNotFound("模板包不存在或不可修改")
+        return template
+
+    async def editable_draft(self, version_id: int):
+        """The draft that edits go to: itself if editable, otherwise a new draft."""
+        source = await self.get(version_id)
+        if source["editable"]:
+            return source
+        manifest = TemplatePackage.model_validate(source["manifest"])
+        # Shared system packages are copied; owned packages receive a new version.
+        return await self.create(
+            manifest, source["template_id"] if source["user_id"] else None
+        )
+
+    async def update_draft(
+        self, version_id: int, manifest: TemplatePackage, expected_hash=None
+    ):
+        """Drafts are mutable workspaces; projects can only use published versions."""
+        source = await self.get(version_id)
+        if not source["editable"]:
+            raise PackageConflict("已发布或停用的版本不可修改，请先创建草稿")
+        expected_hash = expected_hash or source["content_hash"]
+        await asyncio.to_thread(validate_package, manifest)
+        async with self.sessions() as session, session.begin():
+            template = await self._owned_template(session, source["template_id"])
+            row = await session.get(
+                TemplatePackageVersion, version_id, with_for_update=True
+            )
+            if row is None:
+                raise PackageNotFound("模板包版本不存在")
+            if row.status not in {"draft", "validated"}:
+                raise PackageConflict("已发布或停用的版本不可修改，请先创建草稿")
+            if expected_hash and row.content_hash != expected_hash:
+                raise PackageConflict("草稿已在其他窗口修改，请刷新后重试")
+            if manifest.package_id != row.manifest["package_id"]:
+                raise PackageConflict("草稿必须保留模板包标识")
+            manifest = TemplatePackage.model_validate(
+                {
+                    **manifest.model_dump(),
+                    "version": row.version,
+                    "name": template.template_name,
+                }
+            )
+            row.manifest = manifest.model_dump(mode="json")
+            row.content_hash = manifest.content_hash()
+            row.status, row.validation_report = "draft", None
+            await session.flush()
+            return self.payload(row, template)
+
+    async def mutate_draft(self, version_id: int, mutate, expected_hash=None):
+        """Apply a component-list change to a draft after full-package validation."""
+        source = await self.get(version_id)
+        if not source["editable"]:
+            raise PackageConflict("已发布或停用的版本不可修改，请先创建草稿")
+        if expected_hash and source["content_hash"] != expected_hash:
+            raise PackageConflict("草稿已在其他窗口修改，请刷新后重试")
+        package = TemplatePackage.model_validate(source["manifest"])
+        components = mutate(list(package.components))
+        if not 1 <= len(components) <= 40:
+            raise PackageConflict("模板包必须保留 1–40 个版式")
+        candidate = TemplatePackage.model_validate(
+            {**package.model_dump(), "components": tuple(components)}
+        )
+        return await self.update_draft(version_id, candidate, source["content_hash"])
+
+    async def _references(self, session, version_ids):
+        if not version_ids:
+            return 0
+        return await session.scalar(
+            select(func.count())
+            .select_from(PackageProjectState)
+            .where(PackageProjectState.version_id.in_(version_ids))
+        )
+
+    async def rename(self, template_id: int, name: str):
+        name = name.strip()[:255]
+        if not name:
+            raise ValueError("名称不能为空")
+        async with self.sessions() as session, session.begin():
+            template = await self._owned_template(session, template_id)
+            template.template_name = name
+            # Published manifests are immutable; drafts pick the name up for export.
+            drafts = (
+                await session.scalars(
+                    select(TemplatePackageVersion).where(
+                        TemplatePackageVersion.template_id == template_id,
+                        TemplatePackageVersion.status.in_(("draft", "validated")),
+                    )
+                )
+            ).all()
+            for row in drafts:
+                manifest = TemplatePackage.model_validate(
+                    {**row.manifest, "name": name}
+                )
+                row.manifest = manifest.model_dump(mode="json")
+                row.content_hash = manifest.content_hash()
+                row.status, row.validation_report = "draft", None
+        return {"template_id": template_id, "template_name": name}
+
+    async def delete_template(self, template_id: int):
+        async with self.sessions() as session, session.begin():
+            template = await self._owned_template(session, template_id)
+            versions = (
+                await session.scalars(
+                    select(TemplatePackageVersion).where(
+                        TemplatePackageVersion.template_id == template_id
+                    )
+                )
+            ).all()
+            used = await self._references(session, [v.id for v in versions])
+            if used:
+                # Referenced versions must stay readable for existing projects.
+                template.is_active = False
+                for row in versions:
+                    if row.status == "published":
+                        row.status = "retired"
+                return {"deleted": True, "hidden": True, "projects": used}
+            await session.execute(
+                delete(TemplatePackageVersion).where(
+                    TemplatePackageVersion.template_id == template_id
+                )
+            )
+            await session.delete(template)
+            return {"deleted": True, "hidden": False, "projects": 0}
+
+    async def delete_version(self, version_id: int):
+        source = await self.get(version_id)
+        if not source["editable"]:
+            raise PackageConflict("只能删除自己的草稿版本；已发布版本请停用")
+        async with self.sessions() as session, session.begin():
+            template = await self._owned_template(session, source["template_id"])
+            row = await session.get(
+                TemplatePackageVersion, version_id, with_for_update=True
+            )
+            if row is None:
+                raise PackageNotFound("模板包版本不存在")
+            if row.status not in {"draft", "validated"}:
+                raise PackageConflict("版本已发布，不能删除草稿")
+            if await self._references(session, [version_id]):
+                raise PackageConflict("有项目正在使用此版本")
+            await session.delete(row)
+            await session.flush()
+            left = await session.scalar(
+                select(func.count())
+                .select_from(TemplatePackageVersion)
+                .where(TemplatePackageVersion.template_id == template.id)
+            )
+            if not left:
+                await session.delete(template)
+        return {"deleted": True}

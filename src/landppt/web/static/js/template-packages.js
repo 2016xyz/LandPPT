@@ -50,6 +50,7 @@
             frame.style.transform = `scale(${holder.clientWidth / 1280})`;
         });
         observer.observe(holder);
+        holder.disposePreview = () => observer.disconnect();
         const modal = document.querySelector('.package-dialog[open]');
         if (modal) modal.addEventListener('close', () => observer.disconnect(), {once: true});
         return holder;
@@ -66,31 +67,116 @@
         packages = (await request(api)).packages;
         render();
     }
+    function confirmDialog(title, text, okText='确定', danger=false) {
+        return new Promise(resolve => {
+            const modal=dialog(title); modal.classList.add('package-confirm');
+            let result=false;
+            const ok=button(okText,()=>{result=true;modal.close();},true); if(danger) ok.classList.add('danger');
+            const footer=node('footer'); footer.append(button('取消',()=>modal.close()),ok);
+            modal.append(node('p',text),footer);
+            modal.addEventListener('close',()=>resolve(result),{once:true});
+        });
+    }
+    function promptDialog(title, label, value) {
+        return new Promise(resolve => {
+            const modal=dialog(title); modal.classList.add('package-confirm');
+            const wrap=node('label',label); const input=node('input'); input.value=value || ''; input.maxLength=255; wrap.append(input);
+            let result=null;
+            const form=node('form'); form.addEventListener('submit',e=>{e.preventDefault(); if(input.value.trim()){result=input.value.trim();modal.close();}});
+            const footer=node('footer'); const save=node('button','保存','primary'); save.type='submit';
+            footer.append(button('取消',()=>modal.close()),save); form.append(wrap,footer); modal.append(form);
+            modal.addEventListener('close',()=>resolve(result),{once:true});
+            input.focus(); input.select();
+        });
+    }
+    async function download(pkg) {
+        const manifest=await request(`${api}/${pkg.id}/export`);
+        const url=URL.createObjectURL(new Blob([JSON.stringify(manifest,null,2)],{type:'application/json'}));
+        const a=node('a'); a.href=url; a.download=`${pkg.manifest.package_id}-v${pkg.version}.json`;
+        (Array.from(document.querySelectorAll('dialog[open]')).at(-1) || document.body).append(a);
+        a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000);
+    }
+    async function renamePackage(pkg) {
+        const name=await promptDialog('重命名模板包','名称',pkg.template_name);
+        if(!name || name===pkg.template_name) return;
+        await request(`/api/global-master-templates/package-templates/${pkg.template_id}`,'PATCH',{name});
+        await load(); message('已重命名。已发布版本的内容不变。');
+    }
+    async function deletePackage(pkg) {
+        const versions=packages.filter(p=>p.template_id===pkg.template_id).length;
+        if(!await confirmDialog('删除模板包',`将删除“${pkg.template_name}”及其全部 ${versions} 个版本。正在使用它的项目不受影响，但之后不能再选择它。`,'删除模板包',true)) return;
+        const result=await request(`/api/global-master-templates/package-templates/${pkg.template_id}`,'DELETE');
+        await load(); message(result.hidden?`已删除。${result.projects} 个项目仍在使用旧版本，这些项目可以继续编辑和导出。`:'模板包已删除。');
+    }
+    async function deleteVersion(pkg) {
+        if(!await confirmDialog('删除草稿',`删除“${pkg.template_name}”的草稿 v${pkg.version}？此操作不可撤销。`,'删除草稿',true)) return;
+        await request(`${api}/${pkg.id}`,'DELETE'); await load(); message('草稿已删除。');
+    }
+    function openWorkspace(pkg) {
+        if(!window.PackageWorkspace) throw new Error('编辑器加载失败，请刷新页面后重试。');
+        window.PackageWorkspace.open(pkg,{packages,onChange:()=>load().catch(e=>message(e.message,true))});
+    }
     function render() {
-        const grid = document.getElementById('packageGrid'); grid.replaceChildren();
+        const grid = document.getElementById('packageGrid');
+        grid.querySelectorAll('.package-preview-holder').forEach(el=>el.disposePreview?.());
+        grid.replaceChildren();
         const filter = document.getElementById('packageFilter').value;
         const visible = packages.filter(p => filter === 'all' || p.status === filter);
         if (!visible.length) grid.append(node('p','还没有模板包。添加内置包，或用 AI 创建自己的设计。','package-empty'));
         for (const pkg of visible) {
             const card = node('article',undefined,'package-card');
             const cover = node('div',undefined,'package-card-preview'); const frame=node('iframe');
-            frame.src=`${api}/${pkg.id}/preview/${pkg.manifest.components[0].id}`; frame.title=pkg.template_name+'预览'; frame.loading='lazy'; frame.setAttribute('sandbox',''); frame.tabIndex=-1; cover.append(fitPreview(frame));
-            const body=node('div',undefined,'package-card-body'); body.append(node('h3',pkg.template_name),node('small',`v${pkg.version} · ${statuses[pkg.status]} · ${pkg.manifest.components.length} 种版式`),node('p',pkg.manifest.description));
-            const actions=node('div',undefined,'package-tools package-card-actions'); actions.append(button('预览版式',()=>preview(pkg)));
-            const management=node('details',undefined,'package-card-management');
-            management.append(node('summary','版本与管理'));
-            const secondary=node('div',undefined,'package-tools');
+            frame.src=`${api}/${pkg.id}/preview/${encodeURIComponent(pkg.manifest.components[0].id)}?h=${pkg.content_hash.slice(0,12)}`; frame.title=pkg.template_name+'预览'; frame.loading='lazy'; frame.setAttribute('sandbox',''); frame.tabIndex=-1; cover.append(fitPreview(frame));
+            const body=node('div',undefined,'package-card-body');
+            const meta=node('small',`v${pkg.version} · ${pkg.manifest.components.length} 个页面`);
+            const badge=node('span',statuses[pkg.status],'package-badge is-'+pkg.status);
+            const title=node('div',undefined,'package-card-title'); title.append(node('h3',pkg.template_name),badge);
+            body.append(title,meta,node('p',pkg.manifest.description));
+            const actions=node('div',undefined,'package-tools package-card-actions');
             if(panel.dataset.mode==='select' && pkg.status==='published') actions.append(button('使用此模板包快速生成', async()=>{
                 await request(`/api/projects/${encodeURIComponent(project)}/template-package`,'POST',{version_id:pkg.id,options:{allow_images:document.getElementById('packageImages').checked,image_budget:Number(document.getElementById('packageBudget').value)}});
                 window.location.href=typeof getPPTGeneratorUrl==='function' ? getPPTGeneratorUrl() : `/projects/${encodeURIComponent(project)}/slides`;
             },true));
-            if(pkg.user_id && ['draft','validated'].includes(pkg.status)) actions.append(button('校验并发布',async()=>{await request(`${api}/${pkg.id}/publish`,'POST');await load();message('版本已发布，可以用于生成。');},true));
-            if(pkg.user_id && pkg.status==='published') secondary.append(button('停用',async()=>{await request(`${api}/${pkg.id}/retire`,'POST');await load();message('已停用。引用此版本的项目仍可继续使用。');}));
-            secondary.append(button('复制为新草稿',async()=>{await request(api,'POST',{manifest:pkg.manifest});await load();message('草稿已保存。');}));
-            if(pkg.user_id) secondary.append(button('创建下一版本',async()=>{await request(api,'POST',{manifest:pkg.manifest,template_id:pkg.template_id});await load();message('新版本草稿已保存，已有项目仍使用原版本。');}));
-            secondary.append(button('导出模板包',()=>{const blob=new Blob([JSON.stringify(pkg.manifest,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=node('a');a.href=url;a.download=`${pkg.manifest.package_id}-v${pkg.version}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}));
-            management.append(secondary);body.append(actions,management);card.append(cover,body);grid.append(card);
+            if(pkg.editable) actions.append(button('校验并发布',async()=>{await request(`${api}/${pkg.id}/publish`,'POST');await load();message('版本已发布，可以用于生成。');},true));
+            const row=node('div',undefined,'package-card-row');
+            row.append(button(pkg.editable?'编辑草稿':'编辑',()=>openWorkspace(pkg)),button('预览',()=>preview(pkg)));
+            const menu=node('details',undefined,'package-menu');
+            const summary=node('summary','更多'); summary.setAttribute('aria-label','更多操作');
+            const list=node('div',undefined,'package-menu-list');
+            if(pkg.user_id) list.append(button('重命名',()=>renamePackage(pkg)));
+            list.append(button('导出 JSON',()=>download(pkg)));
+            list.append(button('复制为新模板包',async()=>{await request(api,'POST',{manifest:pkg.manifest});await load();message('已复制为新的模板包草稿。');}));
+            if(pkg.user_id && pkg.status==='published') list.append(button('停用此版本',async()=>{await request(`${api}/${pkg.id}/retire`,'POST');await load();message('已停用。引用此版本的项目仍可继续使用。');}));
+            if(pkg.editable) list.append(button('删除此草稿',()=>deleteVersion(pkg)));
+            if(pkg.user_id){const del=button('删除模板包',()=>deletePackage(pkg)); del.classList.add('danger'); list.append(del);}
+            list.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>menu.open=false));
+            menu.append(summary,list); row.append(menu);
+            actions.append(row);
+            body.append(actions);card.append(cover,body);grid.append(card);
         }
+    }
+    async function readEditStream(response, onEvent) {
+        if (!response.ok) throw new Error((await response.json()).detail || '编辑失败');
+        if (!response.body) throw new Error('浏览器无法读取生成进度，请刷新后重试。');
+        const reader=response.body.getReader(), decoder=new TextDecoder();
+        let buffer='';
+        try {
+            while (true) {
+                const {done,value}=await reader.read();
+                buffer+=decoder.decode(value || new Uint8Array(),{stream:!done}).replace(/\r\n/g,'\n');
+                let split;
+                while ((split=buffer.indexOf('\n\n'))>=0) {
+                    const chunk=buffer.slice(0,split);buffer=buffer.slice(split+2);
+                    const data=chunk.split('\n').filter(line=>line.startsWith('data:')).map(line=>line.slice(5).trimStart()).join('\n');
+                    if (!data) continue;
+                    const item=JSON.parse(data);
+                    if (item.type==='error') throw new Error(item.message || '编辑失败');
+                    await onEvent(item);
+                    if (item.type==='complete') return;
+                }
+                if (done) throw new Error('连接已中断，未收到完成确认。请关闭窗口检查草稿列表后再重试。');
+            }
+        } finally { await reader.cancel().catch(()=>{}); reader.releaseLock(); }
     }
     async function generate() {
         const modal=dialog('创建自己的模板包');
@@ -107,6 +193,8 @@
         },true);
         modal.append(instructions,progress,status,submit);
     }
+    window.PackageUI={request,node,button,dialog,fitPreview,readEditStream,confirmDialog,download,families,api};
+    document.addEventListener('click',e=>{document.querySelectorAll('.package-menu[open]').forEach(m=>{if(!m.contains(e.target))m.open=false;});});
     if(panel){
         document.getElementById('packageInstall').addEventListener('click',async function(){this.disabled=true;try{await request(api+'/builtin','POST');await load();message('内置模板包已添加。');}catch(e){message(e.message,true);}finally{this.disabled=false;}});
         document.getElementById('packageCreate').addEventListener('click',generate);

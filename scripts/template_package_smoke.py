@@ -371,19 +371,19 @@ async def main(ui_only=False):
                     "button", name="快速模式生成", exact=False
                 ).click()
                 assert not await page.locator("#regularTemplatePanel").is_visible()
-                await page.get_by_role("button", name="预览版式", exact=True).wait_for()
+                await page.get_by_role("button", name="预览", exact=True).wait_for()
                 await page.frame_locator(".package-card iframe").locator(
                     "svg"
                 ).wait_for()
                 await page.screenshot(path=str(out / "catalog.png"), full_page=True)
                 assert not await page.get_by_role(
-                    "button", name="停用", exact=True
+                    "button", name="停用此版本", exact=True
                 ).is_visible()
-                await page.get_by_text("版本与管理", exact=True).click()
+                await page.get_by_text("更多", exact=True).click()
                 assert await page.get_by_role(
-                    "button", name="停用", exact=True
+                    "button", name="停用此版本", exact=True
                 ).is_visible()
-                await page.get_by_text("版本与管理", exact=True).click()
+                await page.get_by_text("更多", exact=True).click()
                 await page.set_viewport_size({"width": 390, "height": 844})
                 await page.locator(".package-card-preview").scroll_into_view_if_needed()
                 await page.frame_locator(".package-card iframe").locator(
@@ -399,7 +399,7 @@ async def main(ui_only=False):
                     "document.documentElement.scrollWidth <= innerWidth"
                 ), "Template picker overflows on mobile"
                 await page.set_viewport_size({"width": 1440, "height": 1000})
-                await page.get_by_role("button", name="预览版式", exact=True).click()
+                await page.get_by_role("button", name="预览", exact=True).click()
                 await page.get_by_label("预览版式").select_option(index=4)
                 await page.screenshot(path=str(out / "preview.png"), full_page=True)
                 await page.set_viewport_size({"width": 390, "height": 844})
@@ -623,6 +623,9 @@ async def main(ui_only=False):
                     not await trigger.is_visible()
                 ), "Ordinary projects must not show package editing"
                 await page.unroute(package_state_url)
+                from template_package_workspace_smoke import check_workspace
+
+                await check_workspace(page, catalog, storage, saved, out)
                 assert not errors, errors
                 report["ui"] = {
                     "catalog": True,
@@ -637,6 +640,11 @@ async def main(ui_only=False):
                     "management_tabs_and_keyboard": True,
                     "management_tab_survives_reload": True,
                     "package_editor_uses_toolbar": True,
+                    "ai_package_edit_add_modify_delete_publish": True,
+                    "ai_package_edit_disconnected_stream": True,
+                    "workspace_live_preview_and_multi_round": True,
+                    "workspace_page_operations_and_undo": True,
+                    "workspace_rename_export_delete": True,
                 }
                 print("UI and database edit passed", flush=True)
                 if ui_only:

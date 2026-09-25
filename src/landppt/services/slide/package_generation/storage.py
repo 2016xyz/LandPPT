@@ -13,6 +13,7 @@ from sqlalchemy import delete, select, update
 from ....database.database import AsyncSessionLocal
 from ....database.models import (
     CreditTransaction,
+    GlobalMasterTemplate,
     NarrationAudio,
     PackagePageState,
     PackageProjectState,
@@ -81,8 +82,19 @@ class PackageStorage:
             raise PackageConflict("只能选择已发布的模板包版本")
         async with self.sessions() as session, session.begin():
             project = await self._project(session, project_id, write=True)
+            # Serialize selecting a package with catalog deletion/retirement.
+            template = await session.scalar(
+                select(GlobalMasterTemplate)
+                .where(GlobalMasterTemplate.id == version["template_id"])
+                .with_for_update()
+            )
             current = await session.get(TemplatePackageVersion, version_id)
-            if current.status != "published":
+            if (
+                not template
+                or template.is_active is False
+                or not current
+                or current.status != "published"
+            ):
                 raise PackageConflict("模板包版本已停用")
             state = await session.get(PackageProjectState, project_id)
             if state and state.run_token and state.lease_until > time.time():

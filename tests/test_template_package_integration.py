@@ -645,6 +645,126 @@ async def test_automatic_repair_cannot_change_facts():
 
 
 @pytest.mark.asyncio
+async def test_ai_package_edit_preserves_source_and_pinned_project(db, monkeypatch):
+    from landppt.services.template_package import editor
+
+    catalog, store, saved, snapshot = await prepare(db)
+    original = TemplatePackage.model_validate(saved["manifest"])
+    operations = [
+        {"action": "modify", "component_id": "cover", "instruction": "修改封面配色"},
+        {"action": "delete", "component_id": "section", "instruction": "删除章节页"},
+        {
+            "action": "add",
+            "component_id": "cover_dark",
+            "reference_id": "cover",
+            "instruction": "增加深色封面",
+        },
+    ]
+    changed_svg = original.components[0].svg.replace("#F4F1EA", "#EEF2F6")
+    completion = AsyncMock(
+        side_effect=[
+            ({"operations": operations}, {}),
+            ({"changes": {"svg": changed_svg, "description": "新的封面配色"}}, {}),
+            ({"changes": {"description": "另一个封面"}}, {}),
+        ]
+    )
+    monkeypatch.setattr(editor.ContentService, "json_completion", completion)
+    events = [
+        e async for e in editor.edit_package(None, catalog, saved, "修改、删除、新增")
+    ]
+    result = events[-1]
+    draft = result["package"]
+    assert draft["status"] == "draft" and draft["version"] == 2
+    assert draft["template_id"] == saved["template_id"]
+    by_id = {c["id"]: c for c in draft["manifest"]["components"]}
+    assert "section" not in by_id and "cover_dark" in by_id
+    assert by_id["cover"]["description"] == "新的封面配色"
+    for component in original.components:
+        if component.id not in {"cover", "section"}:
+            assert by_id[component.id] == component.model_dump(mode="json")
+    assert result["changes"][1]["action"] == "delete"
+    assert await catalog.get(saved["id"]) == saved
+    assert (await store.snapshot("p1"))["version_id"] == snapshot["version_id"]
+    assert (await catalog.transition(draft["id"], "publish"))["status"] == "published"
+
+
+@pytest.mark.asyncio
+async def test_ai_package_edit_route_checks_owner_before_model_and_credits(
+    db, monkeypatch
+):
+    from fastapi import FastAPI
+
+    from landppt.api import template_package_api as api
+    from landppt.services.template_package import editor
+    from landppt.web.route_modules import support
+
+    catalog, _, saved, _ = await prepare(db)
+    app = FastAPI()
+    app.include_router(api.router)
+    app.dependency_overrides[api.get_current_user_required] = lambda: SimpleNamespace(
+        id=1
+    )
+    app.dependency_overrides[api.catalog] = lambda: catalog
+    provider = AsyncMock(return_value=(None, {"provider": "landppt"}))
+    monkeypatch.setattr(
+        support,
+        "get_ppt_service_for_user",
+        lambda uid: SimpleNamespace(user_id=uid, get_role_provider_async=provider),
+    )
+    charge = AsyncMock(return_value=(True, "ok"))
+    credit_check = AsyncMock(return_value=(True, 1, 100))
+    monkeypatch.setattr(support, "consume_credits_for_operation", charge)
+    monkeypatch.setattr(support, "check_credits_for_operation", credit_check)
+    completion = AsyncMock(
+        return_value=(
+            {
+                "operations": [
+                    {
+                        "action": "delete",
+                        "component_id": "section",
+                        "instruction": "删除章节页",
+                    }
+                ]
+            },
+            {},
+        )
+    )
+    monkeypatch.setattr(editor.ContentService, "json_completion", completion)
+    url = f"/api/global-master-templates/packages/{saved['id']}/edit"
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        app.dependency_overrides[api.catalog] = lambda: PackageCatalog(2, db)
+        assert (
+            await client.post(url, json={"prompt": "删除章节页"})
+        ).status_code == 404
+        provider.assert_not_awaited()
+        app.dependency_overrides[api.catalog] = lambda: catalog
+        credit_check.return_value = (False, 1, 0)
+        assert (
+            await client.post(url, json={"prompt": "删除章节页"})
+        ).status_code == 402
+        completion.assert_not_awaited()
+        credit_check.return_value = (True, 1, 100)
+        response = await client.post(url, json={"prompt": "删除章节页"})
+    assert response.status_code == 200
+    assert response.headers["x-accel-buffering"] == "no"
+    events = [
+        json.loads(line[6:])
+        for line in response.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    assert events[-1]["type"] == "complete"
+    assert events[-1]["package"]["version"] == 2
+    charge.assert_awaited_once()
+    # Rounds on one draft share its ID, so the content hash keeps each charge distinct.
+    assert charge.await_args.kwargs["reference_id"] == (
+        f"package-version:{events[-1]['package']['id']}:"
+        f"{events[-1]['package']['content_hash'][:12]}"
+    )
+
+
+@pytest.mark.asyncio
 async def test_image_budget_reserves_later_manual_pages(db, monkeypatch):
     from landppt.services.slide.package_generation import workflow
 

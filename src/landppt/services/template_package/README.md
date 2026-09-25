@@ -56,6 +56,13 @@
 | 详情与样例预览 | `GET .../packages/{version_id}`、`.../preview/{component_id}` |
 | 校验、发布、停用 | `POST .../packages/{version_id}/{validate,publish,retire}` |
 | AI 创建设计 | `POST /api/global-master-templates/packages-generate`（SSE） |
+| AI 编辑已有模板包 | `POST .../packages/{version_id}/edit`（SSE，`prompt` 描述增删改要求） |
+| 打开或创建编辑草稿 | `POST .../packages/{version_id}/draft` |
+| AI 修改或新增单页 | `POST .../packages/{version_id}/components-ai`（SSE） |
+| 删除、复制、移动单页 | `DELETE .../components/{id}`；`POST .../components/{id}/{duplicate,move}` |
+| 恢复草稿内容（撤销） | `PUT .../packages/{version_id}/manifest` |
+| 导出包、删除草稿 | `GET .../packages/{version_id}/export`；`DELETE .../packages/{version_id}` |
+| 重命名、删除整个包 | `PATCH/DELETE /api/global-master-templates/package-templates/{template_id}` |
 | 决策模型设置 | `GET/PUT .../packages/settings` |
 | 测试当前决策配置（不保存） | `POST .../packages/settings/test` |
 | 项目选择及状态 | `GET/POST /api/projects/{project_id}/template-package` |
@@ -67,6 +74,18 @@
 修改请求携带 `expected_revision`，冲突返回 409。所有资源接口检查登录用户和项目/模板/图片权限。`SlideData.template_id` 仍只用于原 `ppt_templates` 外键。
 
 ## 验证与边界
+
+2026-09-25：模板包卡片“编辑 / 编辑草稿”打开三栏工作区：页面列表、实时预览、AI 多轮编辑。用户可针对整包或单页描述修改、删除、新增要求，使用当前用户的 `template_generation` 模型，流式调用复用 `ContentService`。整包编辑先规划操作；单页编辑直接处理所选组件。组件通过校验后即推送示例 HTML，在整轮保存前更新预览，未经校验的 SVG 不显示。服务端保留其他组件，逐项校验 SVG、槽位、容量和示例，再校验整包。计划和组件校验失败分别最多修复一次；任一项仍失败就不保存本轮编辑。禁止重复 ID、编辑不存在的版式、清空包和超过 40 个版式。
+
+编辑已发布的自有包先创建下一版本草稿，系统共享包另存为用户草稿；后续各轮继续修改同一草稿，已发布版本及项目固定引用不变。草稿写入检查内容哈希，拒绝覆盖其他窗口的修改；发布、重命名、删除与修改按一致锁顺序执行。工作区支持单页复制、移动、删除、AI 修改/新增，以及本次会话内撤销；对话历史保留在当前窗口，各轮结果自动保存。发布后再次修改才创建新的草稿版本。
+
+卡片“更多”提供重命名、导出 JSON、复制、删除草稿和删除整包；工作区也提供重命名与导出。重命名不会改写已发布 manifest，导出文件使用当前包名且可重新导入。删除被项目引用的模板包时，将其隐藏并停用公开版本，保留项目所需数据；无引用的包才物理删除。
+
+AI 每轮沿用模板创建的积分检查和计费。SSE 每 15 秒发送心跳，断开时取消未完成模型请求；前端只有收到 `complete` 才确认保存，失败时回退临时预览并提示检查草稿。最后保存与网络断开同时发生时可能已保存草稿，因此不会自动重放编辑请求。
+
+相关回归覆盖三类操作、多轮草稿修改、并发冲突、原包与项目引用保护、发布、权限与积分检查、恶意 SVG 拒绝、心跳与取消。浏览器 smoke 使用真实 API 与隔离 SQLite；工作区检查位于 `scripts/template_package_workspace_smoke.py`，由原 smoke 入口调用。模型输出使用模拟响应，未实测付费模型的设计质量。
+
+本轮 `test_template_package_workspace.py`、`test_template_package_editor.py`、`test_template_package_integration.py` 合跑 **60 passed**。`template_package_smoke.py --ui-only` 已验证流式预览中途暂停/断开回退、两轮编辑同一草稿、单页操作与撤销、重命名、实际 JSON 下载、发布和删除后的项目引用保护。桌面/手机截图为 `package-workspace-desktop.png`、`package-workspace-mobile.png`，检查缩略图比例、容器宽度和移动端预览/对话区无重叠。
 
 2026-09-25 流式调用改造：`test_package_streaming_completion.py` 新增 12 项全部通过，使用真实 OpenAI SDK 与模拟 HTTP SSE 检查请求参数、碎片 JSON、用量、缺失结束标记、截断、网络错误、超时/取消关闭连接，以及 SVG 回退入口。与现有模型接口和模板包恢复测试合跑为 95 passed、2 failed；两个大纲提示词断言失败已存在于 `artifacts/template-package/pytest-existing.log` 基线。未调用真实 `mapi.landppt.com`，未部署运行镜像。源码挂载部署需重启应用进程；镜像部署需更新包含修改的镜像后重新创建容器。
 

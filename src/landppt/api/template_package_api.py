@@ -2,13 +2,14 @@
 
 import asyncio
 import json
+import logging
 import time
 from typing import Literal
 from urllib.parse import urlsplit
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ..auth.middleware import get_current_user_required
@@ -86,6 +87,52 @@ class EditInstruction(RequestModel):
 
 class GeneratePackage(RequestModel):
     prompt: str = Field(min_length=1, max_length=6000)
+
+    @field_validator("prompt")
+    @classmethod
+    def nonempty_prompt(cls, value):
+        if not value.strip():
+            raise ValueError("请填写具体要求")
+        return value.strip()
+
+
+class EditPackageRequest(GeneratePackage):
+    history: list[str] = Field(default_factory=list, max_length=12)
+    expected_hash: str | None = Field(None, max_length=64)
+
+    @field_validator("history")
+    @classmethod
+    def clip_history(cls, value):
+        return [item.strip()[:1000] for item in value if item.strip()]
+
+
+class ComponentAIRequest(RequestModel):
+    action: Literal["modify", "add"]
+    instruction: str = Field(min_length=1, max_length=4000)
+    component_id: str | None = Field(None, max_length=100)
+    reference_id: str | None = Field(None, max_length=100)
+    expected_hash: str | None = Field(None, max_length=64)
+
+    @field_validator("instruction")
+    @classmethod
+    def nonempty_instruction(cls, value):
+        if not value.strip():
+            raise ValueError("请填写具体要求")
+        return value.strip()
+
+
+class DraftManifest(RequestModel):
+    manifest: TemplatePackage
+    expected_hash: str | None = Field(None, max_length=64)
+
+
+class MoveComponent(RequestModel):
+    offset: int = Field(ge=-40, le=40)
+    expected_hash: str | None = Field(None, max_length=64)
+
+
+class RenamePackage(RequestModel):
+    name: str = Field(min_length=1, max_length=255)
 
 
 class SelectorSettings(RequestModel):
@@ -232,6 +279,239 @@ async def get_package(version_id: int, service=Depends(catalog)):
     return await checked(service.get(version_id))
 
 
+async def package_edit_events(events, on_complete, heartbeat_seconds=15):
+    """Keep slow model calls alive without cancelling them on each heartbeat."""
+    pending = None
+    try:
+        while True:
+            if pending is None:
+                pending = asyncio.create_task(anext(events))
+            done, _ = await asyncio.wait({pending}, timeout=heartbeat_seconds)
+            if not done:
+                yield ": heartbeat\n\n"
+                continue
+            try:
+                item = pending.result()
+            except StopAsyncIteration:
+                break
+            pending = None
+            if item["type"] == "complete":
+                await on_complete(item)
+            yield "data: " + json.dumps(item, ensure_ascii=False) + "\n\n"
+    except Exception as exc:
+        logging.getLogger(__name__).exception("AI package editing failed")
+        if isinstance(exc, TimeoutError):
+            message = "模型响应超时，请稍后重试。原模板包未改动。"
+        elif isinstance(exc, ValueError):
+            message = str(exc)[:4000]
+        else:
+            message = (
+                "模板包编辑失败，请稍后重试或检查模板生成模型配置。原模板包未改动。"
+            )
+        yield "data: " + json.dumps(
+            {"type": "error", "message": message}, ensure_ascii=False
+        ) + "\n\n"
+    finally:
+        if pending is not None:
+            pending.cancel()
+            await asyncio.gather(pending, return_exceptions=True)
+        await events.aclose()
+
+
+async def billed_edit_stream(user, description, make_events):
+    """Credit check before the model call; one charge per successful round."""
+    from ..web.route_modules.support import (
+        check_credits_for_operation,
+        consume_credits_for_operation,
+        get_ppt_service_for_user,
+    )
+
+    service = get_ppt_service_for_user(user.id)
+    _, settings = await service.get_role_provider_async("template_generation")
+    ok, _, _ = await check_credits_for_operation(
+        user.id, "template_generation", 1, provider_name=settings.get("provider")
+    )
+    if not ok:
+        raise HTTPException(402, "积分不足")
+
+    async def on_complete(item):
+        await consume_credits_for_operation(
+            user.id,
+            "template_generation",
+            1,
+            description=description,
+            reference_id=(
+                f"package-version:{item['package']['id']}:{item['package']['content_hash'][:12]}"
+                if item["package"].get("content_hash")
+                else f"package-version:{item['package']['id']}"
+            ),
+            provider_name=settings.get("provider"),
+        )
+
+    return StreamingResponse(
+        package_edit_events(make_events(service), on_complete),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post("/api/global-master-templates/packages/{version_id}/edit")
+async def edit_package_with_ai(
+    version_id: int,
+    payload: EditPackageRequest,
+    user=Depends(get_current_user_required),
+    repository=Depends(catalog),
+):
+    from ..services.template_package.editor import edit_package
+
+    source = await checked(repository.get(version_id))
+    if payload.expected_hash and source["content_hash"] != payload.expected_hash:
+        raise HTTPException(409, "草稿已在其他窗口修改，请刷新后重试")
+    return await billed_edit_stream(
+        user,
+        "AI 模板包编辑",
+        lambda service: edit_package(
+            service, repository, source, payload.prompt, payload.history
+        ),
+    )
+
+
+@router.post("/api/global-master-templates/packages/{version_id}/components-ai")
+async def edit_component_with_ai(
+    version_id: int,
+    payload: ComponentAIRequest,
+    user=Depends(get_current_user_required),
+    repository=Depends(catalog),
+):
+    from ..services.template_package.editor import edit_single_component
+
+    source = await checked(repository.get(version_id))
+    if not source["editable"]:
+        raise HTTPException(409, "请先创建草稿再编辑单个版式")
+    if payload.expected_hash and source["content_hash"] != payload.expected_hash:
+        raise HTTPException(409, "草稿已在其他窗口修改，请刷新后重试")
+    return await billed_edit_stream(
+        user,
+        "AI 模板包版式编辑",
+        lambda service: edit_single_component(
+            service,
+            repository,
+            source,
+            payload.action,
+            payload.instruction,
+            component_id=payload.component_id,
+            reference_id=payload.reference_id,
+        ),
+    )
+
+
+@router.post("/api/global-master-templates/packages/{version_id}/draft")
+async def open_draft(version_id: int, service=Depends(catalog)):
+    return await checked(service.editable_draft(version_id))
+
+
+@router.put("/api/global-master-templates/packages/{version_id}/manifest")
+async def replace_draft_manifest(
+    version_id: int, payload: DraftManifest, service=Depends(catalog)
+):
+    return await checked(
+        service.update_draft(version_id, payload.manifest, payload.expected_hash)
+    )
+
+
+@router.delete(
+    "/api/global-master-templates/packages/{version_id}/components/{component_id}"
+)
+async def delete_component(
+    version_id: int,
+    component_id: str,
+    expected_hash: str = "",
+    service=Depends(catalog),
+):
+    def mutate(components):
+        if not any(c.id == component_id for c in components):
+            raise PackageNotFound("版式不存在")
+        return [c for c in components if c.id != component_id]
+
+    return await checked(service.mutate_draft(version_id, mutate, expected_hash))
+
+
+@router.post(
+    "/api/global-master-templates/packages/{version_id}/components/{component_id}/duplicate"
+)
+async def duplicate_component(
+    version_id: int,
+    component_id: str,
+    expected_hash: str = "",
+    service=Depends(catalog),
+):
+    from ..services.template_package.editor import unique_id
+
+    def mutate(components):
+        index = next(
+            (i for i, c in enumerate(components) if c.id == component_id), None
+        )
+        if index is None:
+            raise PackageNotFound("版式不存在")
+        copy = components[index].model_copy(
+            update={"id": unique_id(f"{component_id}-copy", {c.id for c in components})}
+        )
+        return [*components[: index + 1], copy, *components[index + 1 :]]
+
+    return await checked(service.mutate_draft(version_id, mutate, expected_hash))
+
+
+@router.post(
+    "/api/global-master-templates/packages/{version_id}/components/{component_id}/move"
+)
+async def move_component(
+    version_id: int, component_id: str, payload: MoveComponent, service=Depends(catalog)
+):
+    def mutate(components):
+        index = next(
+            (i for i, c in enumerate(components) if c.id == component_id), None
+        )
+        if index is None:
+            raise PackageNotFound("版式不存在")
+        target = max(0, min(len(components) - 1, index + payload.offset))
+        moved = components.pop(index)
+        components.insert(target, moved)
+        return components
+
+    return await checked(
+        service.mutate_draft(version_id, mutate, payload.expected_hash)
+    )
+
+
+@router.get("/api/global-master-templates/packages/{version_id}/export")
+async def export_package(version_id: int, service=Depends(catalog)):
+    version = await checked(service.get(version_id))
+    manifest = {**version["manifest"], "name": version["template_name"]}
+    filename = f"{manifest['package_id']}-v{version['version']}.json"
+    return Response(
+        json.dumps(manifest, ensure_ascii=False, indent=2),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.delete("/api/global-master-templates/packages/{version_id}")
+async def delete_package_version(version_id: int, service=Depends(catalog)):
+    return await checked(service.delete_version(version_id))
+
+
+@router.patch("/api/global-master-templates/package-templates/{template_id}")
+async def rename_package(
+    template_id: int, payload: RenamePackage, service=Depends(catalog)
+):
+    return await checked(service.rename(template_id, payload.name))
+
+
+@router.delete("/api/global-master-templates/package-templates/{template_id}")
+async def delete_package(template_id: int, service=Depends(catalog)):
+    return await checked(service.delete_template(template_id))
+
+
 @router.post("/api/global-master-templates/packages/{version_id}/{action}")
 async def transition_package(
     version_id: int,
@@ -263,7 +543,9 @@ async def preview_package(version_id: int, component_id: str, service=Depends(ca
     return HTMLResponse(
         result.html_content,
         headers={
-            "Content-Security-Policy": "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:;"
+            "Content-Security-Policy": "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:;",
+            # Drafts change in place while editing; never show a stale page.
+            "Cache-Control": "no-store",
         },
     )
 
