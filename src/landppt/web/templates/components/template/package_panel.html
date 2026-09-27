@@ -1,6 +1,6 @@
-<section class="package-panel" id="templatePackagePanel" data-mode="{{ package_panel_mode }}">
+<section class="package-panel" id="templatePackagePanel" data-mode="{{ package_panel_mode }}"{% if package_preference is defined and package_preference.get('mode') == 'package' %} data-preferred-version="{{ package_preference.get('version_id') }}"{% endif %}>
     <header class="package-heading"><div><h2>{{ '选择模板包' if package_panel_mode == 'select' else '快速模式模板包' }}</h2><p>统一整套演示风格，自动匹配每一页的内容。</p></div>
-        <div class="package-tools"><label class="import-control">导入模板包<input type="file" id="packageImport" accept="application/json,.json" aria-label="导入模板包"></label><button type="button" id="packageInstall">添加内置模板包</button><button type="button" id="packageCreate" class="primary">AI 创建模板包</button></div>
+        <div class="package-tools"><button type="button" id="packagePptxImport">从 PPTX 创建</button><label class="import-control">导入模板包<input type="file" id="packageImport" accept="application/json,.json,.zip" aria-label="导入模板包"></label><button type="button" id="packageInstall">添加内置模板包</button><button type="button" id="packageCreate" class="primary">AI 创建模板包</button></div>
     </header>
     <div class="package-options">
         <label class="package-image-toggle"><input type="checkbox" id="packageImages"> 为内容自动配图</label>
@@ -11,6 +11,7 @@
     <div class="package-grid" id="packageGrid"></div>
     <div class="package-settings-link"><span>决策模型（如 Jev）可辅助匹配版式，也可使用默认匹配方式。</span><a href="/ai-config#jev-config">决策模型配置 <span aria-hidden="true">→</span></a></div>
 </section>
-<link rel="stylesheet" href="/static/css/template-packages.css?v=20260925-workspace2">
-<script src="/static/js/template-packages.js?v=20260925-workspace2" defer></script>
-<script src="/static/js/template-package-workspace.js?v=20260925-workspace2" defer></script>
+<link rel="stylesheet" href="/static/css/template-packages.css?v=20260927-import-progress">
+<script src="/static/js/template-packages.js?v=20260926-cap" defer></script>
+<script src="/static/js/template-package-workspace.js?v=20260926-pptx" defer></script>
+<script src="/static/js/template-package-pptx.js?v=20260927-import-progress" defer></script>

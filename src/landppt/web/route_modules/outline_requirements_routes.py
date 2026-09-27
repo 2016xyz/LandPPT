@@ -12,6 +12,12 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from ...auth.middleware import get_current_user_required
 from ...database.models import User
 from ...services.slide.svg_page.render_mode import normalize_render_mode
+from ...services.template_package.catalog import PackageCatalog, PackageNotFound
+from ...services.template_package.outline_reference import (
+    PREFERENCE_KEY,
+    REFERENCE_KEY,
+    load_package_preference,
+)
 from .outline_support import (
     _is_billable_provider,
     _normalize_content_source_urls,
@@ -35,6 +41,10 @@ from .unattended_support import (
 )
 
 router = APIRouter()
+
+
+async def _load_package_preference(user_id: int, version_id: int):
+    return await load_package_preference(user_id, version_id, catalog_factory=PackageCatalog)
 
 
 @router.get("/projects/{project_id}/todo-editor")
@@ -87,6 +97,8 @@ async def confirm_project_requirements(
     ppt_style: str = Form("general"),
     custom_style_prompt: str = Form(None),
     render_mode: str = Form("html"),
+    generation_mode: str = Form("freeform"),
+    package_version_id: int = Form(0),
     description: str = Form(None),
     content_source: str = Form("manual"),
     file_upload: List[UploadFile] = File(None),
@@ -125,6 +137,14 @@ async def confirm_project_requirements(
         language = "zh"  # Default language
         if project.project_metadata and isinstance(project.project_metadata, dict):
             language = project.project_metadata.get("language", "zh")
+
+        # Fast mode chosen up front: outline prompts carry the package's layout limits.
+        package_preference = None
+        package_reference = None
+        if generation_mode == "package":
+            package_preference, package_reference = await _load_package_preference(
+                user.id, package_version_id
+            )
 
         # Handle content sources
         file_outline = None
@@ -251,6 +271,10 @@ async def confirm_project_requirements(
                 template_id=unattended_template_id,
             ),
         }
+
+        confirmed_requirements[PREFERENCE_KEY] = package_preference or {"mode": "freeform"}
+        if package_reference:
+            confirmed_requirements[REFERENCE_KEY] = package_reference
 
         # 如果是文件项目，保存文件信息
         if content_source in ("file", "url") and file_outline and 'file_info' in file_outline:

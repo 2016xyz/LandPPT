@@ -78,13 +78,13 @@ def render_page(
     if problems:
         raise PackageRenderError(problems)
     try:
-        root = validate_component(component)
+        root = validate_component(component, package.assets)
     except ValueError as exc:
         raise PackageRenderError([str(exc)]) from exc
     nodes = {node.get("id"): node for node in root.iter() if node.get("id")}
     fields = display_fields(content)
     assets = assets or {}
-    used_urls = set()
+    used_urls = {asset.url() for asset in package.assets}
     for slot in component.slots:
         node = nodes[slot.node_id]
         value = fields.get(slot.field, "")
@@ -99,6 +99,7 @@ def render_page(
             node.set("href", url)
             node.set("preserveAspectRatio", "xMidYMid slice")
             used_urls.add(url)
+    _apply_image_crops(root)
     sanitized = sanitize_svg(serialize(root), allowed_image_urls=used_urls)
     if sanitized.issues:
         raise PackageRenderError(sanitized.issues)
@@ -126,9 +127,7 @@ def render_page(
         problems.append(f"layout: {describe(node_id)} {defect}")
     for layout in layouts:
         if layout.font_size < max(18, layout.original_font_size * 0.75):
-            problems.append(
-                f"excessive font reduction: {describe(layout.element_id)}"
-            )
+            problems.append(f"excessive font reduction: {describe(layout.element_id)}")
     if problems:
         raise PackageRenderError(problems)
     markup = sanitized.markup
@@ -153,3 +152,41 @@ def render_page(
             "layout_report": {"blocking": [], "advisory": inspection.advisory},
         },
     )
+
+
+def _apply_image_crops(root):
+    """Generate clipping geometry ourselves; templates cannot inject clip paths."""
+    from lxml import etree
+
+    from ..svg_page.constants import SVG_NS
+
+    for node in list(root.iter(f"{{{SVG_NS}}}image")):
+        crop = node.get("data-crop", "rect")
+        if crop == "rect":
+            continue
+        x, y, w, h = (float(node.get(k)) for k in ("x", "y", "width", "height"))
+        clip_id = f"package-crop-{node.get('id')}"
+        if any(n.get("id") == clip_id for n in root.iter()):
+            raise PackageRenderError(["reserved crop ID already exists"])
+        defs = etree.SubElement(root, f"{{{SVG_NS}}}defs")
+        clip = etree.SubElement(defs, f"{{{SVG_NS}}}clipPath", id=clip_id)
+        if crop == "circle":
+            etree.SubElement(
+                clip,
+                f"{{{SVG_NS}}}ellipse",
+                cx=str(x + w / 2),
+                cy=str(y + h / 2),
+                rx=str(w / 2),
+                ry=str(h / 2),
+            )
+        else:
+            etree.SubElement(
+                clip,
+                f"{{{SVG_NS}}}rect",
+                x=str(x),
+                y=str(y),
+                width=str(w),
+                height=str(h),
+                rx=str(min(w, h) * 0.08),
+            )
+        node.set("clip-path", f"url(#{clip_id})")

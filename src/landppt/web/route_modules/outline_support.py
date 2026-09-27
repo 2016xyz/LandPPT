@@ -20,6 +20,7 @@ from fastapi import HTTPException, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from ...api.models import FileOutlineGenerationRequest, PPTProject
+from ...services.template_package.outline_reference import with_package_reference
 from ...services.db_project_manager import DatabaseProjectManager
 from ...utils.thread_pool import run_blocking_io
 from .support import (
@@ -246,6 +247,7 @@ async def _prepare_uploaded_source_outline_request(
     requirements_text = requirements_override
     if requirements_text is None:
         requirements_text = confirmed_requirements.get("requirements") or project.requirements or ""
+    requirements_text = with_package_reference(requirements_text, confirmed_requirements)
 
     page_count_settings = confirmed_requirements.get("page_count_settings", {})
     page_count_mode = page_count_settings.get("mode", "ai_decide")
@@ -392,6 +394,7 @@ async def _generate_outline_from_confirmed_sources(
     requirements_text = requirements_override
     if requirements_text is None:
         requirements_text = confirmed_requirements.get("requirements") or project.requirements or ""
+    requirements_text = with_package_reference(requirements_text, confirmed_requirements)
 
     page_count_settings = confirmed_requirements.get("page_count_settings", {})
     page_count_mode = page_count_settings.get("mode", "ai_decide")

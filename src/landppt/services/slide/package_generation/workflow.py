@@ -529,6 +529,11 @@ class PackageWorkflow:
                         previous_family=previous_family,
                         previous_components=previous_components,
                         fixed_before=fixed_before,
+                        preferred={
+                            o["slide_id"]: o.get("layout")
+                            for o in batch
+                            if o.get("layout")
+                        },
                     )
                 for sid in pending:
                     page = by_id[sid]

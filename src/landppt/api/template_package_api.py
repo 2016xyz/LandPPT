@@ -487,6 +487,17 @@ async def move_component(
 async def export_package(version_id: int, service=Depends(catalog)):
     version = await checked(service.get(version_id))
     manifest = {**version["manifest"], "name": version["template_name"]}
+    if manifest.get("assets"):
+        from ..services.template_package.archive import export_archive
+
+        package = TemplatePackage.model_validate(manifest)
+        return Response(
+            await asyncio.to_thread(export_archive, package),
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": f'attachment; filename="{package.package_id}-v{package.version}.zip"'
+            },
+        )
     filename = f"{manifest['package_id']}-v{version['version']}.json"
     return Response(
         json.dumps(manifest, ensure_ascii=False, indent=2),
@@ -529,14 +540,17 @@ async def preview_package(version_id: int, component_id: str, service=Depends(ca
     if not component:
         raise HTTPException(404, "组件不存在")
     content = component.examples[0]
+    from ..services.template_package.service import example_assets
+
+    samples = example_assets(package, component)
     try:
         result = await asyncio.to_thread(
             render_page,
             package,
             component_id,
             content,
-            assets={v.id: VALIDATION_IMAGE for v in content.visual_briefs},
-            allowed_image_urls=frozenset({VALIDATION_IMAGE}),
+            assets=samples,
+            allowed_image_urls=frozenset(samples.values()),
         )
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc

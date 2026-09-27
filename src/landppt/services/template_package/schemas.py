@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
+from io import BytesIO
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -127,6 +129,11 @@ class PageComponent(ContractModel):
     metrics: ItemRange = ItemRange()
     images: ItemRange = ItemRange()
     examples: Annotated[tuple[PageContent, ...], Field(min_length=1, max_length=10)]
+    reference_asset: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")] | None = None
+    source_slide: Annotated[int, Field(ge=1, le=100)] | None = None
+    sample_assets: dict[
+        Identifier, Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+    ] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_slots(self):
@@ -146,8 +153,36 @@ class PackageTheme(ContractModel):
     muted: Annotated[str, Field(pattern=r"^#[0-9a-fA-F]{6}$")] = "#50646A"
 
 
+class PackageAsset(ContractModel):
+    """Immutable raster stored with the version, never in the user's image library."""
+
+    id: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+    media_type: Literal["image/png", "image/jpeg"] = "image/png"
+    data: Annotated[str, Field(max_length=12_000_000)]
+
+    @model_validator(mode="after")
+    def validate_image(self):
+        from PIL import Image
+
+        try:
+            raw = base64.b64decode(self.data, validate=True)
+            if hashlib.sha256(raw).hexdigest() != self.id:
+                raise ValueError("asset hash mismatch")
+            with Image.open(BytesIO(raw)) as image:
+                expected = "PNG" if self.media_type == "image/png" else "JPEG"
+                if image.format != expected or image.width * image.height > 16_000_000:
+                    raise ValueError("unsupported asset format or dimensions")
+                image.verify()
+        except Exception as exc:
+            raise ValueError(f"invalid package asset: {exc}") from exc
+        return self
+
+    def url(self):
+        return f"data:{self.media_type};base64,{self.data}"
+
+
 class TemplatePackage(ContractModel):
-    contract_version: Literal[1] = 1
+    contract_version: Literal[1, 2] = 1
     package_id: Identifier
     version: Annotated[int, Field(strict=True, ge=1)]
     name: Annotated[str, Field(min_length=1, max_length=255)]
@@ -159,17 +194,38 @@ class TemplatePackage(ContractModel):
     canvas_height: Literal[720] = 720
     theme: PackageTheme = PackageTheme()
     components: Annotated[tuple[PageComponent, ...], Field(min_length=1, max_length=40)]
+    assets: Annotated[tuple[PackageAsset, ...], Field(max_length=120)] = ()
 
     @model_validator(mode="after")
     def validate_component_ids(self):
         ids = [component.id for component in self.components]
         if len(ids) != len(set(ids)):
             raise ValueError("component IDs must be unique")
+        asset_ids = [asset.id for asset in self.assets]
+        if len(asset_ids) != len(set(asset_ids)):
+            raise ValueError("asset IDs must be unique")
+        if self.assets and self.contract_version != 2:
+            raise ValueError("package assets require contract_version 2")
+        for component in self.components:
+            references = set(component.sample_assets.values())
+            if component.reference_asset:
+                references.add(component.reference_asset)
+            if not references.issubset(asset_ids):
+                raise ValueError("component references missing package assets")
+        if sum(len(asset.data) for asset in self.assets) > 80_000_000:
+            raise ValueError("package assets exceed 60 MB")
         return self
 
     def content_hash(self) -> str:
+        payload = self.model_dump(mode="json")
+        if self.contract_version == 1:
+            payload.pop("assets", None)  # Preserve hashes of published v1 packages.
+            for component in payload["components"]:
+                for field in ("reference_asset", "source_slide", "sample_assets"):
+                    if not component[field]:
+                        component.pop(field)
         canonical = json.dumps(
-            self.model_dump(mode="json"),
+            payload,
             ensure_ascii=False,
             sort_keys=True,
             separators=(",", ":"),

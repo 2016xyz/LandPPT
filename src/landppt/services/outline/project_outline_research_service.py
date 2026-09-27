@@ -313,6 +313,8 @@ class ProjectOutlineResearchService:
                     standardized_slide = {'page_number': slide.get('page_number', slide.get('id', len(standardized_slides) + 1)), 'title': slide.get('title', f'第{len(standardized_slides) + 1}页'), 'content_points': content_points, 'slide_type': slide_type, 'type': mapped_type, 'description': slide.get('description', '')}
                     if 'chart_config' in slide and slide['chart_config']:
                         standardized_slide['chart_config'] = slide['chart_config']
+                    if isinstance(slide.get('layout'), str) and slide['layout'].strip():
+                        standardized_slide['layout'] = slide['layout'].strip()[:100]
                     standardized_slides.append(standardized_slide)
                 except Exception as slide_error:
                     logger.warning(

@@ -13,6 +13,7 @@ x-landppt-volumes: &landppt-volumes
   - landppt_reports:/app/research_reports
   - landppt_cache:/app/temp
   - landppt_lib:/app/lib
+  - pptx_render_spool:/app/pptx-render-spool
 
 x-landppt-env: &landppt-env
   PYTHONPATH: /opt/venv/lib/python3.11/site-packages:/app/src
@@ -50,6 +51,7 @@ x-landppt-env: &landppt-env
   S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-true}
   S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-}
   S3_PRESIGNED_URL_EXPIRES_SECONDS: ${S3_PRESIGNED_URL_EXPIRES_SECONDS:-3600}
+  LANDPPT_PPTX_RENDER_SPOOL: /app/pptx-render-spool
 
 x-landppt-depends-on: &landppt-depends-on
   permissions-init:
@@ -61,6 +63,8 @@ x-landppt-depends-on: &landppt-depends-on
   minio:
     condition: service_healthy
   minio-init:
+    condition: service_completed_successfully
+  pptx-render-init:
     condition: service_completed_successfully
 
 services:
@@ -134,6 +138,40 @@ services:
     restart: unless-stopped
     networks:
       - landppt_network
+
+  # PPTX template import: isolated LibreOffice worker sharing a job spool.
+  pptx-render-init:
+    image: python:3.11-slim
+    user: "0:0"
+    network_mode: "none"
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER]
+    command: [python, -c, "import os; os.chown('/spool', 10001, 10001); os.chmod('/spool', 0o700)"]
+    volumes:
+      - pptx_render_spool:/spool
+    restart: "no"
+
+  pptx-renderer:
+    build: ./scripts/pptx-renderer
+    image: ${LANDPPT_PPTX_RENDERER_IMAGE:-landppt-pptx-renderer:latest}
+    user: "10001:10001"
+    depends_on:
+      pptx-render-init:
+        condition: service_completed_successfully
+    network_mode: "none"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 1g
+    cpus: 1.0
+    pids_limit: 128
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+    volumes:
+      - pptx_render_spool:/spool
+    restart: unless-stopped
 
   postgres:
     image: postgres:16-alpine
@@ -222,6 +260,8 @@ volumes:
   valkey_data:
     driver: local
   minio_data:
+    driver: local
+  pptx_render_spool:
     driver: local
 
 networks:

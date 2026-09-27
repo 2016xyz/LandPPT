@@ -32,7 +32,7 @@ def _number(node: etree._Element, attribute: str, *, positive: bool = False) -> 
     return value
 
 
-def validate_component(component: PageComponent) -> etree._Element:
+def validate_component(component: PageComponent, assets=()) -> etree._Element:
     """Return a fresh tree, rejecting invalid packages rather than repairing them."""
     root = parse_svg(component.svg)
     if root.get("viewBox") != "0 0 1280 720":
@@ -46,6 +46,7 @@ def validate_component(component: PageComponent) -> etree._Element:
             nodes[node_id] = node
 
     image_ids = set()
+    asset_urls = {asset.id: asset.url() for asset in assets}
     for slot in component.slots:
         node = nodes.get(slot.node_id)
         expected = "image" if slot.kind == "image" else "text"
@@ -76,6 +77,10 @@ def validate_component(component: PageComponent) -> etree._Element:
                 raise PackageValidationError(f"{slot.node_id}: slots must be opaque")
         x, y = _number(node, "x"), _number(node, "y")
         if slot.kind == "text":
+            if node.get("data-align", "left") not in {"left", "center", "right"}:
+                raise PackageValidationError("invalid horizontal alignment")
+            if node.get("data-valign", "top") not in {"top", "middle", "bottom"}:
+                raise PackageValidationError("invalid vertical alignment")
             width = _number(node, "data-box-w", positive=True)
             height = _number(node, "data-box-h", positive=True)
             size = _number(node, "font-size", positive=True)
@@ -91,6 +96,8 @@ def validate_component(component: PageComponent) -> etree._Element:
                 )
             top = y - size
         else:
+            if node.get("data-crop", "rect") not in {"rect", "circle", "rounded"}:
+                raise PackageValidationError("unsupported image crop")
             width = _number(node, "width", positive=True)
             height = _number(node, "height", positive=True)
             top = y
@@ -107,8 +114,21 @@ def validate_component(component: PageComponent) -> etree._Element:
 
     for node in root.iter():
         if local_name(node) == "image" and node.get("id") not in image_ids:
-            raise PackageValidationError("every image must have a declared slot")
-    sanitized = sanitize_svg(serialize(root), allowed_image_urls={VALIDATION_IMAGE})
+            asset_id = node.get("data-asset")
+            if not asset_id or asset_id not in asset_urls:
+                raise PackageValidationError(
+                    "every image must have a declared slot or package asset"
+                )
+            if any(etree.QName(attr).localname == "href" for attr in node.attrib):
+                raise PackageValidationError(
+                    "fixed images must use data-asset, not href"
+                )
+            node.set("href", asset_urls[asset_id])
+        elif node.get("data-asset") is not None:
+            raise PackageValidationError("data-asset is only allowed on fixed images")
+    sanitized = sanitize_svg(
+        serialize(root), allowed_image_urls={VALIDATION_IMAGE, *asset_urls.values()}
+    )
     if sanitized.issues:
         raise PackageValidationError(
             "unsafe or unsupported SVG: " + "; ".join(sanitized.issues)

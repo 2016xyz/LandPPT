@@ -17,6 +17,7 @@
         <button type="button" data-generation-mode="package" aria-pressed="false" aria-controls="templatePackagePanel"><strong>快速模式生成</strong><span>先编写内容，再匹配整套模板版式</span></button>
     </div>
     <p id="generationModeHint" role="status">选择下方模板后开始生成。</p>
+    {% if package_notice %}<p class="generation-mode-notice" role="alert">{{ package_notice }}</p>{% endif %}
 </section>
 {% set package_panel_mode = 'select' %}
 {% include "components/template/package_panel.html" %}
@@ -29,5 +30,5 @@
 <script>
 {% include "components/template/template_selection/content_script_1.html" %}
 </script>
-<script src="/static/js/generation-mode-picker.js?v=20260923-entry2" defer></script>
+<script src="/static/js/generation-mode-picker.js?v=20260926-pref" defer></script>
 {% endblock %}

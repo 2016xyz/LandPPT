@@ -33,6 +33,7 @@ from ..runtime.ai_execution import (
     new_ai_conversation_id,
 )
 from ..prompts import prompts_manager
+from ..template_package.outline_reference import with_package_reference
 from ..research.enhanced_research_service import EnhancedResearchService
 from ..research.enhanced_report_generator import EnhancedReportGenerator
 from ..pyppeteer_pdf_converter import get_pdf_converter
@@ -302,7 +303,7 @@ class ProjectOutlineStreamingService:
             language = 'zh'
             if project.project_metadata and isinstance(project.project_metadata, dict):
                 language = project.project_metadata.get('language', 'zh')
-            file_request = FileOutlineGenerationRequest(file_path=report_path, filename=Path(report_path).name, topic=confirmed_requirements.get('topic', project.topic), scenario=confirmed_requirements.get('type', project.scenario), requirements=confirmed_requirements.get('requirements', project.requirements), description=confirmed_requirements.get('description'), language=language, page_count_mode=confirmed_requirements.get('page_count_settings', {}).get('mode', 'ai_decide'), min_pages=confirmed_requirements.get('page_count_settings', {}).get('min_pages', 8), max_pages=confirmed_requirements.get('page_count_settings', {}).get('max_pages', 15), fixed_pages=confirmed_requirements.get('page_count_settings', {}).get('fixed_pages', 10), ppt_style=confirmed_requirements.get('ppt_style', 'general'), custom_style_prompt=confirmed_requirements.get('custom_style_prompt'), include_transition_pages=bool(confirmed_requirements.get('include_transition_pages', False)), target_audience=confirmed_requirements.get('target_audience', '普通大众'), custom_audience=confirmed_requirements.get('custom_audience'), file_processing_mode='markitdown', content_analysis_depth='fast')
+            file_request = FileOutlineGenerationRequest(file_path=report_path, filename=Path(report_path).name, topic=confirmed_requirements.get('topic', project.topic), scenario=confirmed_requirements.get('type', project.scenario), requirements=with_package_reference(confirmed_requirements.get('requirements', project.requirements), confirmed_requirements), description=confirmed_requirements.get('description'), language=language, page_count_mode=confirmed_requirements.get('page_count_settings', {}).get('mode', 'ai_decide'), min_pages=confirmed_requirements.get('page_count_settings', {}).get('min_pages', 8), max_pages=confirmed_requirements.get('page_count_settings', {}).get('max_pages', 15), fixed_pages=confirmed_requirements.get('page_count_settings', {}).get('fixed_pages', 10), ppt_style=confirmed_requirements.get('ppt_style', 'general'), custom_style_prompt=confirmed_requirements.get('custom_style_prompt'), include_transition_pages=bool(confirmed_requirements.get('include_transition_pages', False)), target_audience=confirmed_requirements.get('target_audience', '普通大众'), custom_audience=confirmed_requirements.get('custom_audience'), file_processing_mode='markitdown', content_analysis_depth='fast')
             structured_outline = None
             llm_call_count = 0
             last_ping_at = time.time()
@@ -496,6 +497,7 @@ class ProjectOutlineStreamingService:
             if getattr(project, 'project_metadata', None):
                 outline_language = project.project_metadata.get('language') or 'zh'
             prompt = prompts_manager.get_streaming_outline_prompt(topic=topic, target_audience=target_audience, ppt_style=ppt_style, page_count_instruction=page_count_instruction, research_section='', include_transition_pages=bool(confirmed_requirements.get('include_transition_pages', False)), language=outline_language)
+            prompt = with_package_reference(prompt, confirmed_requirements)
             yield f"data: {json.dumps({'status': {'step': 'generating', 'message': 'AI 正在构建大纲...', 'progress': 0.0}})}\n\n"
             try:
                 content = ''

@@ -1,0 +1,17 @@
+# Standalone renderer. Both this worker and the application need the same spool.
+services:
+  pptx-renderer:
+    build: ./scripts/pptx-renderer
+    user: "${LANDPPT_RENDER_UID:-1000}:${LANDPPT_RENDER_GID:-1000}"
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 1g
+    cpus: 1.0
+    pids_limit: 128
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+    volumes:
+      - ${PPTX_RENDER_SPOOL_HOST:-./temp/pptx-render-spool}:/spool
+    restart: unless-stopped

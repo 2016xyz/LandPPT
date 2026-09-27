@@ -687,6 +687,17 @@
         grid-template-columns: 1fr;
     }
 }
+.composer-generation { border-top: 1px solid var(--line, #e5e7eb); padding: 16px 30px; display: grid; gap: 12px; }
+.composer-generation-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.composer-generation label { font-size: 14px; font-weight: 600; color: var(--ink-muted, #64748b); }
+.composer-generation .pop-select { width: auto; min-width: 180px; max-width: 100%; }
+.composer-generation .pop-btn { width: auto; flex: 0 0 auto; padding: 8px 12px; }
+.composer-package-selection { display: grid; gap: 8px; }
+.composer-package-selection[hidden] { display: none; }
+.composer-package-selection .pop-select { flex: 1; min-width: 0; }
+.composer-package-hint { font-size: 13px; color: var(--ink-muted, #64748b); margin: 0; }
+.composer-package-hint a { color: inherit; text-decoration: underline; }
+@media (max-width: 650px) { .composer-generation { padding: 14px 18px; } .composer-package-selection .composer-generation-row { align-items: stretch; } }
 </style>
 {% endblock %}
 
@@ -710,6 +721,26 @@
         </div>
 
         <div id="tray" class="composer-tray" hidden></div>
+
+        <section class="composer-generation" aria-label="生成方式设置">
+            <div class="composer-generation-row">
+                <label for="generation_mode">生成方式</label>
+                <select id="generation_mode" class="pop-select">
+                    <option value="freeform">自由设计</option>
+                    <option value="package">快速模式（模板包）</option>
+                </select>
+                <span class="composer-package-hint">快速模式会参考模板包规划大纲</span>
+            </div>
+            <div id="create-package-selection" class="composer-package-selection" hidden>
+                <div class="composer-generation-row">
+                    <label for="package_version_id">模板包</label>
+                    <select id="package_version_id" class="pop-select"><option value="">请选择已发布的模板包</option></select>
+                    <button type="button" class="pop-btn" id="reload-create-packages">刷新列表</button>
+                </div>
+                <p id="create-package-status" class="composer-package-hint" role="status" aria-live="polite"></p>
+                <p class="composer-package-hint">只列出已发布版本。<a href="/global-master-templates?tab=packages" target="_blank" rel="noopener">管理模板包</a></p>
+            </div>
+        </section>
 
         <div class="composer-toolbar">
             <div class="toolbar-pills">
@@ -1054,6 +1085,8 @@
         customStylePrompt: '',
         language: 'zh',
         renderMode: 'html',
+        generationMode: 'freeform',
+        packageVersionId: '',
         networkMode: false,
         includeTransitionPages: false,
         includePageNumbers: true,
@@ -1275,6 +1308,49 @@
         renderModeOptions();
         closePopover();
     });
+
+    let packageLoad = 0;
+    async function loadCreatePackages() {
+        const revision = ++packageLoad;
+        const select = $('package_version_id');
+        const status = $('create-package-status');
+        select.disabled = true;
+        status.textContent = '正在加载已发布的模板包…';
+        try {
+            const response = await fetch('/api/global-master-templates/packages', {credentials: 'same-origin'});
+            if (!response.ok) throw new Error('模板包加载失败，请点击刷新列表重试。');
+            const data = await response.json();
+            if (revision !== packageLoad) return;
+            const packages = data.packages.filter(p => p.status === 'published');
+            select.replaceChildren(new Option('请选择已发布的模板包', ''));
+            packages.forEach(p => select.add(new Option(`${p.template_name} · v${p.version} · ${p.manifest.components.length} 个版式`, String(p.id))));
+            select.value = state.packageVersionId;
+            state.packageVersionId = select.value;
+            status.textContent = packages.length ? '生成大纲时将参考所选包的版式和文字容量；快速模式使用 SVG 绘制。' : '还没有已发布的模板包，请先在模板管理中添加内置包或发布自己的模板包。';
+        } catch (error) {
+            if (revision !== packageLoad) return;
+            select.replaceChildren(new Option('加载失败，请刷新列表', ''));
+            state.packageVersionId = '';
+            status.textContent = error.message;
+        } finally {
+            if (revision === packageLoad) select.disabled = false;
+        }
+    }
+    $('generation_mode').addEventListener('change', e => {
+        hideAlert();
+        state.generationMode = e.target.value;
+        const fast = state.generationMode === 'package';
+        $('create-package-selection').hidden = !fast;
+        document.querySelector('[data-pop="render-mode"]').disabled = fast;
+        if (fast) {
+            state.renderMode = 'svg';
+            renderModeOptions();
+            loadCreatePackages();
+        }
+        renderPills();
+    });
+    $('package_version_id').addEventListener('change', e => { state.packageVersionId = e.target.value; hideAlert(); });
+    $('reload-create-packages').addEventListener('click', loadCreatePackages);
 
     // ── 浮层内输入绑定 ────────────────────────────────────
     $('custom_audience').addEventListener('input', (e) => { state.customAudience = e.target.value; renderPills(); });
@@ -1554,12 +1630,19 @@
         }
 
         const source = contentSource();
+        if (state.generationMode === 'package' && ($('package_version_id').disabled || !state.packageVersionId)) {
+            showAlert('快速模式需要先选择一个已发布的模板包。');
+            $('package_version_id').focus();
+            return;
+        }
         const fd = new FormData();
         fd.append('scenario', state.scenario);
         fd.append('topic', topic);
         fd.append('requirements', requirementsInput.value.trim());
         fd.append('language', state.language);
         fd.append('render_mode', state.renderMode);
+        fd.append('generation_mode', state.generationMode);
+        fd.append('package_version_id', state.generationMode === 'package' ? state.packageVersionId : '0');
         fd.append('network_mode', state.networkMode ? 'true' : 'false');
         fd.append('audience_type', state.audienceType);
         fd.append('custom_audience', state.customAudience.trim());

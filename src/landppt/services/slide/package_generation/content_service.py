@@ -6,9 +6,10 @@ import re
 
 from ....ai import AIMessage, MessageRole
 from ...template_package.schemas import PageContent
-from .candidate_filter import demote_metrics, has_structural_fit
+from .candidate_filter import demote_metrics, has_structural_fit, structural_problems
 from .capacity import slot_limits
 from .options import PROMPT_VERSION
+from .slot_content import content_from_fields, slot_request
 
 
 def parse_json(text):
@@ -144,6 +145,22 @@ class ContentService:
     ):
         from ...prompt_asset_service import strip_base64_image_payloads_for_prompt
 
+        by_component = {c.id: c for c in package.components}
+        planned = {
+            slide["slide_id"]: by_component[slide["layout"]]
+            for slide in slides
+            if slide.get("layout") in by_component
+            and not by_component[slide["layout"]].images.maximum
+        }
+        requests = [
+            (
+                {**slide, "write_into": slot_request(planned[slide["slide_id"]])}
+                if slide["slide_id"] in planned
+                else slide
+            )
+            for slide in slides
+        ]
+
         sources = {
             "requirements": snapshot.get("requirements") or "",
             "outline": snapshot["outline"],
@@ -165,18 +182,61 @@ class ContentService:
             "要点多时拆成更多 blocks 或提炼表述，不要把长段落塞进一个字段。"
             '不得生成 HTML 或 SVG。返回 {"pages":[PageContent,...]}，恰好覆盖请求页。'
             f"允许配图：{allow_images}；不允许时 visual_briefs 必须为空。"
-            "仅在图片有助于表达且对应组件支持时提出 visual_briefs。数值单位分开保存。\n"
+            "仅在图片有助于表达且对应组件支持时提出 visual_briefs。数值单位分开保存。"
+            "requested_slides 中带 layout 的页面已由大纲选定版式：必须按该组件的 slots 只填它显示的字段，"
+            "blocks 数量落在它的范围内，每个字段不超过对应 max_chars。"
+            "带 write_into 的页面必须使用槽位输出格式："
+            '{"slide_id":"原ID","fields":{"title":"新标题","blocks[0].body":"新正文"},'
+            '"source_refs":["outline"]}。'
+            "fields 的键必须来自该页 write_into.fields，所有 required=true 的键必须填非空文字。"
+            "逐个位置填写；同一页各要点可能有不同字段，不能假设每个要点都有 heading。"
+            "这种页面不返回通用 PageContent，也不返回 blocks 数组。"
+            "只用 sources 中当前项目的事实，版式描述和模板名称不属于内容资料。\n"
             + json.dumps(
                 {
                     "schema": PageContent.model_json_schema(),
                     "components": component_contracts(package),
                     "sources": sources,
-                    "requested_slides": slides,
+                    "requested_slides": requests,
                     "feedback": feedback,
                 },
                 ensure_ascii=False,
             )
         )
+        if len(planned) == len(slides):
+            # Do not show the generic PageContent schema here: it invites heading,
+            # subtitle and takeaway fields that a heterogeneous layout cannot bind.
+            prompt = (
+                "为每页指定的版式逐槽位编写最终展示文字。只输出一个 JSON 对象，不要 Markdown。"
+                "只使用 sources 中当前项目的事实与论点；模板说明是版式约束，不是内容资料。"
+                "output_format 给出了每页的全部文字位置，保留每个键，将空字符串填为新主题文字。"
+                "不得增加 heading、subtitle、takeaway 等未列出的键；不得返回 blocks 数组。"
+                "相同 blocks 编号的小标题和正文必须讲述同一个要点，各编号可能有不同字段。"
+                "按 write_into.fields 的 required 和 max_chars 填写，每处文字必须在字数范围内。"
+                "保持每页 slide_id，只能引用 requirements、outline、reference，"
+                "保留核心事实，不编造数据。没有说明槽位的要点用一句正文直接表达。\n"
+                + json.dumps(
+                    {
+                        "sources": sources,
+                        "requested_slides": requests,
+                        "output_format": {
+                            "pages": [
+                                {
+                                    "slide_id": slide["slide_id"],
+                                    "fields": {
+                                        s.field: ""
+                                        for s in planned[slide["slide_id"]].slots
+                                    },
+                                    "source_refs": ["outline"],
+                                }
+                                for slide in slides
+                            ]
+                        },
+                        "feedback": feedback,
+                    },
+                    ensure_ascii=False,
+                )
+            )
         data, usage = await self.json_completion(prompt)
         expected = {slide["slide_id"] for slide in slides}
         raw_pages = data.get("pages", []) if isinstance(data, dict) else data
@@ -193,17 +253,24 @@ class ContentService:
                 continue
             seen.add(slide_id)
             try:
-                content = PageContent.model_validate(strip_model_extras(raw))
+                component = planned.get(slide_id)
+                content = (
+                    content_from_fields(raw, component)
+                    if component is not None and "fields" in raw
+                    else PageContent.model_validate(strip_model_extras(raw))
+                )
                 if not set(content.source_refs).issubset(sources):
                     raise ValueError("引用了未知资料")
                 if not allow_images and content.visual_briefs:
                     raise ValueError("当前项目不允许配图")
-                if not has_structural_fit(
-                    package, content, allow_images=allow_images
-                ):
-                    fixed = demote_metrics(
-                        content, package, allow_images=allow_images
+                if component is not None:
+                    problems = structural_problems(
+                        component, content, allow_images=allow_images
                     )
+                    if problems:
+                        raise ValueError(f"版式 {component.id}：" + "；".join(problems))
+                if not has_structural_fit(package, content, allow_images=allow_images):
+                    fixed = demote_metrics(content, package, allow_images=allow_images)
                     if fixed is None:
                         # Saving it would fail every later retry the same way.
                         raise ValueError(

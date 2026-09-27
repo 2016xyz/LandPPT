@@ -250,7 +250,7 @@ def _layout_single(
     if result.overflow:
         result.notes.append("does-not-fit-after-shrink")
 
-    _rewrite_lines(text_el, lines, size, font_size)
+    _rewrite_lines(text_el, lines, size, font_size, measurer)
     result.rewritten = True
     return result
 
@@ -262,7 +262,11 @@ def _block_height(line_count: int, size: float) -> float:
 
 
 def _rewrite_lines(
-    text_el: etree._Element, lines: List[str], size: float, original_size: float
+    text_el: etree._Element,
+    lines: List[str],
+    size: float,
+    original_size: float,
+    measurer: TextMeasurer,
 ) -> None:
     x = text_el.get("x") or "0"
     if size != original_size:
@@ -270,14 +274,35 @@ def _rewrite_lines(
     for child in list(text_el):
         text_el.remove(child)
     text_el.text = None
-    if len(lines) == 1:
+    aligned = "data-align" in text_el.attrib or "data-valign" in text_el.attrib
+    if len(lines) == 1 and not aligned:
         text_el.text = lines[0]
         text_el.set(LINES_ATTR, "1")
         return
     for index, line in enumerate(lines):
         tspan = etree.SubElement(text_el, f"{{{SVG_NS}}}tspan")
-        tspan.set("x", x)
-        tspan.set("dy", "0" if index == 0 else f"{size * LINE_HEIGHT:g}")
+        offset_x = 0.0
+        offset_y = 0.0
+        if aligned:
+            width = parse_length(text_el.get(BOX_WIDTH_ATTR), 0.0)
+            height = parse_length(text_el.get(BOX_HEIGHT_ATTR), 0.0)
+            remaining = max(
+                0.0,
+                width
+                - measurer.text_width(
+                    line, size, inherited_attribute(text_el, "font-weight", "normal")
+                ),
+            )
+            offset_x = remaining * {"left": 0, "center": 0.5, "right": 1}.get(
+                text_el.get("data-align"), 0
+            )
+            offset_y = max(0.0, height - _block_height(len(lines), size)) * {
+                "top": 0,
+                "middle": 0.5,
+                "bottom": 1,
+            }.get(text_el.get("data-valign"), 0)
+        tspan.set("x", f"{float(x) + offset_x:g}")
+        tspan.set("dy", f"{offset_y:g}" if index == 0 else f"{size * LINE_HEIGHT:g}")
         tspan.text = line
     text_el.set(LINES_ATTR, str(len(lines)))
 

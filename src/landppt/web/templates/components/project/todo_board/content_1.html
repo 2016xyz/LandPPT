@@ -248,6 +248,29 @@
             <input type="hidden" id="render_mode" name="render_mode" value="{{ 'svg' if page_render_mode == 'svg' else 'html' }}">
         </div>
 
+        <!-- 生成方式：快速模式在生成大纲时就参考模板包版式 -->
+        <div class="req-field">
+            <label class="req-label">生成方式<span class="req-label-desc">快速模式会按模板包版式规划大纲</span></label>
+            <div class="req-card-grid-2">
+                <div class="generation-pref-option req-select-card selected" data-generation-pref="freeform">
+                    <div class="req-select-card-title">自由设计</div>
+                    <p class="req-select-card-desc">大纲不受版式限制，确认大纲后再选择模板</p>
+                </div>
+                <div class="generation-pref-option req-select-card" data-generation-pref="package">
+                    <div class="req-select-card-title">快速模式（模板包）</div>
+                    <p class="req-select-card-desc">按所选模板包的版式与字数规划每页要点，减少生成失败</p>
+                </div>
+            </div>
+            <input type="hidden" id="generation_mode" name="generation_mode" value="freeform">
+            <div id="package-preference-section" class="req-sub-panel" hidden>
+                <label class="req-label" for="package_version_id">模板包</label>
+                <select id="package_version_id" name="package_version_id" class="req-select">
+                    <option value="">正在加载已发布的模板包…</option>
+                </select>
+                <small id="package-preference-hint" class="req-hint">只列出已发布版本；可在模板管理的“快速模式模板包”中添加或发布。</small>
+            </div>
+        </div>
+
         <!-- 提交 -->
         <div class="req-submit-area">
             <button type="submit" id="confirm-requirements-btn" class="btn btn-primary requirements-submit-btn">

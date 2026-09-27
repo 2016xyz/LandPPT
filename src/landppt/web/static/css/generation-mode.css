@@ -58,3 +58,5 @@
 }
 @media (prefers-reduced-motion: reduce) { .generation-mode-options button { transition: none; } }
 
+
+.generation-mode-notice { margin: 8px 0 0; color: #b42318; font-weight: 600; }

@@ -564,6 +564,10 @@ class ProjectOutlineNormalizationService:
 
             if slide.get("chart_config"):
                 standardized_slide["chart_config"] = slide["chart_config"]
+            # Fast-mode outlines name the package layout chosen for the page.
+            layout = slide.get("layout")
+            if isinstance(layout, str) and layout.strip():
+                standardized_slide["layout"] = layout.strip()[:100]
 
             standardized_slides.append(standardized_slide)
 

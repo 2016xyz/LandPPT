@@ -1,0 +1,43 @@
+# Overlay for either docker-compose.yml or docker-compose-dev.yaml.
+services:
+  landppt:
+    environment:
+      LANDPPT_PPTX_RENDER_SPOOL: /app/pptx-render-spool
+    volumes:
+      - pptx_render_spool:/app/pptx-render-spool
+  worker:
+    environment:
+      LANDPPT_PPTX_RENDER_SPOOL: /app/pptx-render-spool
+    volumes:
+      - pptx_render_spool:/app/pptx-render-spool
+  pptx-render-init:
+    image: python:3.11-slim
+    user: "0:0"
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER]
+    command: [python, -c, "import os; os.chown('/spool', 10001, 10001); os.chmod('/spool', 0o700)"]
+    volumes:
+      - pptx_render_spool:/spool
+    restart: "no"
+  pptx-renderer:
+    build: ./scripts/pptx-renderer
+    user: "10001:10001"
+    depends_on:
+      pptx-render-init:
+        condition: service_completed_successfully
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 1g
+    cpus: 1.0
+    pids_limit: 128
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+    volumes:
+      - pptx_render_spool:/spool
+    restart: unless-stopped
+volumes:
+  pptx_render_spool:

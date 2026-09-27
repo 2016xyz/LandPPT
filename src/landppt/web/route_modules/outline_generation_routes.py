@@ -11,6 +11,7 @@ from contextlib import aclosing
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ...api.models import FileOutlineGenerationRequest, PPTGenerationRequest
+from ...services.template_package.outline_reference import with_package_reference
 from ...auth.middleware import get_current_user_required
 from ...database.models import User
 from ..responses import ClosingStreamingResponse
@@ -244,7 +245,7 @@ async def generate_outline(
         project_request = PPTGenerationRequest(
             scenario=project.scenario,
             topic=confirmed_requirements.get('topic', project.topic),
-            requirements=project.requirements,
+            requirements=with_package_reference(project.requirements, confirmed_requirements),
             language=language,
             network_mode=network_mode,
             target_audience=confirmed_requirements.get('target_audience', '普通大众'),
@@ -355,7 +356,7 @@ async def regenerate_outline(
         project_request = PPTGenerationRequest(
             scenario=confirmed_requirements.get('scenario', project.scenario),
             topic=confirmed_requirements.get('topic', project.topic),
-            requirements=final_requirements,
+            requirements=with_package_reference(final_requirements, confirmed_requirements),
             language=language,
             network_mode=network_mode,
             target_audience=confirmed_requirements.get('target_audience', '普通大众'),
@@ -581,7 +582,7 @@ async def generate_file_outline(
                             file_path=file_path,
                             topic=project.topic,
                             scenario='general',
-                            requirements=final_reqs,
+                            requirements=with_package_reference(final_reqs, confirmed_requirements),
                             target_audience=confirmed_requirements.get('target_audience', '普通大众'),
                             custom_audience=confirmed_requirements.get('custom_audience'),
                             description=confirmed_requirements.get('description'),

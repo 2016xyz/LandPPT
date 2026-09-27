@@ -161,18 +161,28 @@ def _text_box(
 
     boxes: List[BBox] = []
     baseline = y + shift
+    line_spans = [
+        child
+        for child in element
+        if local_name(child) == "tspan" and child.get("x") is not None
+    ]
     for index, (line, dy) in enumerate(units):
         if dy is not None:
             baseline += dy
         elif index > 0:
             baseline += size * LINE_HEIGHT
         width = measurer.text_width(line, size, weight)
+        line_x = (
+            parse_length(line_spans[index].get("x"), x)
+            if len(line_spans) == len(units)
+            else x
+        )
         if anchor == "middle":
-            x0 = x - width / 2
+            x0 = line_x - width / 2
         elif anchor == "end":
-            x0 = x - width
+            x0 = line_x - width
         else:
-            x0 = x
+            x0 = line_x
         boxes.append(
             BBox(
                 x0,

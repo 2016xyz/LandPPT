@@ -16,5 +16,8 @@
         history.replaceState(null, '', url);
     }
     buttons.forEach(button => button.addEventListener('click', () => select(button.dataset.generationMode)));
-    select(new URLSearchParams(location.search).get('mode') === 'package' ? 'package' : 'freeform');
+    const requested = new URLSearchParams(location.search).get('mode');
+    // A package picked at requirement confirmation shaped the outline; open on it.
+    const preferred = packages && packages.dataset.preferredVersion ? 'package' : 'freeform';
+    select(requested === 'package' || requested === 'freeform' ? requested : preferred);
 })();

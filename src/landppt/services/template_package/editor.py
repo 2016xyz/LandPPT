@@ -9,8 +9,7 @@ from pydantic import Field, model_validator
 from ..slide.package_generation.content_service import ContentService
 from .builtin import load_builtin_package
 from .schemas import ContractModel, Identifier, PageComponent, TemplatePackage
-from .service import validate_package
-from .validator import VALIDATION_IMAGE
+from .service import example_assets, validate_package
 
 
 class ComponentEdit(ContractModel):
@@ -64,12 +63,13 @@ def preview_html(package, component):
     from ..slide.package_generation.renderer import render_page
 
     example = component.examples[0]
+    samples = example_assets(package, component)
     return render_page(
         package.model_copy(update={"components": (component,)}),
         component.id,
         example,
-        assets={v.id: VALIDATION_IMAGE for v in example.visual_briefs},
-        allowed_image_urls=frozenset({VALIDATION_IMAGE}),
+        assets=samples,
+        allowed_image_urls=frozenset(samples.values()),
     ).html_content
 
 
@@ -94,6 +94,9 @@ async def edit_component(content, package, op, prompt, reference, history=()):
                 "SVG viewBox=0 0 1280 720；文字槽位有 x/y/font-size/data-box-w/data-box-h，"
                 "text-anchor=start，字体至少18px，槽位不得预填文字或含子节点。"
                 "不得使用脚本、样式表、transform、mask、clip-path；image 无 href。"
+                "带 data-asset 的固定底图必须原样保留，不能改色、移除或移动；"
+                "data-align(left/center/right)、data-valign(top/middle/bottom) 控制槽位对齐，"
+                "图片槽 data-crop 可用 rect/circle/rounded。"
                 "保留用户未要求修改的内容，文字和图片框不得越界或重叠，示例必须能完整渲染。\n"
                 + json.dumps(
                     {
@@ -117,6 +120,15 @@ async def edit_component(content, package, op, prompt, reference, history=()):
             component = PageComponent.model_validate(
                 {**reference.model_dump(), **patch, "id": op.component_id}
             )
+            from ..slide.svg_page.sanitize import parse_svg, serialize
+
+            def fixed_images(svg):
+                return [
+                    serialize(n) for n in parse_svg(svg).iter() if n.get("data-asset")
+                ]
+
+            if fixed_images(component.svg) != fixed_images(reference.svg):
+                raise ValueError("固定底图必须原样保留；可编辑槽位不受此限制")
             candidate = package.model_copy(update={"components": (component,)})
             await asyncio.to_thread(validate_package, candidate)
             return component

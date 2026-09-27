@@ -13,4 +13,4 @@ class PackageOptions(BaseModel):
     repair_attempts: int = Field(1, ge=0, le=2)
 
 
-PROMPT_VERSION = "package-content-v1"
+PROMPT_VERSION = "package-content-v2-slots"

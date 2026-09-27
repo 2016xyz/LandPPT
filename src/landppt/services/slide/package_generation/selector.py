@@ -80,8 +80,11 @@ async def select_components(
     previous_components=(),
     fixed_before=None,
     locked=None,
+    preferred=None,
 ):
     locked = locked or {}
+    # Layouts the outline chose for each page; a tie-breaking preference only.
+    preferred = preferred or {}
     candidates = {
         p.slide_id: compatible_components(
             package,
@@ -125,7 +128,10 @@ async def select_components(
 
         try:
             data, usage = await content_service.json_completion(
-                '为每页选择最适合表达目的的合法组件。只从 candidates 选择，返回 {"choices":{slide_id:component_id}}。\n'
+                "为每页选择最适合表达目的的合法组件。每一页都必须恰好选中一个组件，"
+                "只能从该页的 candidates 中选，不允许留空、返回 null 或自造 ID；"
+                "outline_layouts 是大纲阶段为该页选定的版式，合法时优先采用。"
+                '返回 {"choices":{slide_id:component_id}}。\n'
                 + json.dumps(
                     {
                         "pages": [p.model_dump(mode="json") for p in incomplete],
@@ -135,6 +141,11 @@ async def select_components(
                             for sid, values in candidates.items()
                             if sid in {p.slide_id for p in incomplete}
                         },
+                        "outline_layouts": {
+                            p.slide_id: preferred.get(p.slide_id)
+                            for p in incomplete
+                            if preferred.get(p.slide_id)
+                        },
                     },
                     ensure_ascii=False,
                 )
@@ -142,10 +153,13 @@ async def select_components(
             choices = data["choices"]
             fallback_scores = {}
             for p in incomplete:
+                # An invalid pick for one page no longer discards the others;
+                # that page falls back to the rules below and still gets a layout.
                 if choices.get(p.slide_id) not in {
                     c.id for c in candidates[p.slide_id]
                 }:
-                    raise ValueError("invalid component choice")
+                    audit.setdefault("invalid_choices", []).append(p.slide_id)
+                    continue
                 for c in candidates[p.slide_id]:
                     fallback_scores[p.slide_id, c.id] = (
                         1.0 if c.id == choices[p.slide_id] else rule_score(p, c) * 0.9
@@ -168,6 +182,9 @@ async def select_components(
                 scores[p.slide_id, c.id] = rule_score(p, c)
         audit["selector"] = "jev+rules" if audit["selector"] == "jev" else "rules"
         audit["rule_fallback_pages"] = [p.slide_id for p in rule_pages]
+    for (sid, cid), value in list(scores.items()):
+        if preferred.get(sid) == cid:
+            scores[sid, cid] = value + 0.1
     audit["candidate_counts"] = {sid: len(values) for sid, values in candidates.items()}
     audit["single_candidate_pages"] = [
         sid for sid, values in candidates.items() if len(values) == 1

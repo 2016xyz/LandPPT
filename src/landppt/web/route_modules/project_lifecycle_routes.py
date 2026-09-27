@@ -14,6 +14,9 @@ from ...api.models import PPTGenerationRequest
 from ...auth.middleware import get_current_user_required
 from ...database.models import User
 from ...services.slide.svg_page.render_mode import normalize_render_mode
+from ...services.template_package.outline_reference import (
+    PREFERENCE_KEY, REFERENCE_KEY, load_package_preference,
+)
 from .outline_support import (
     _normalize_content_source_urls,
     _save_uploaded_files_for_confirmed_requirements,
@@ -206,6 +209,8 @@ async def web_create_project_and_confirm(
     requirements: str = Form(None),
     language: str = Form("zh"),
     render_mode: str = Form("html"),
+    generation_mode: str = Form("freeform"),
+    package_version_id: int = Form(0),
     network_mode: bool = Form(False),
     audience_type: str = Form("普通大众"),
     custom_audience: str = Form(None),
@@ -238,6 +243,16 @@ async def web_create_project_and_confirm(
         topic = (topic or "").strip()
         if not topic:
             raise ValueError("请填写 PPT 主题")
+
+        package_preference, package_reference = None, None
+        if generation_mode not in {"freeform", "package"}:
+            return JSONResponse({"status": "error", "message": "无效的生成方式"}, status_code=422)
+        if generation_mode == "package":
+            try:
+                package_preference, package_reference = await load_package_preference(user.id, package_version_id)
+            except ValueError as exc:
+                return JSONResponse({"status": "error", "message": str(exc)}, status_code=422)
+            render_mode = "svg"
 
         # 先处理内容来源，避免在素材无效时留下一个无法继续的空项目
         source_urls: List[str] = []
@@ -311,6 +326,10 @@ async def web_create_project_and_confirm(
         }
         if saved_file_metadata:
             confirmed_requirements.update(saved_file_metadata)
+
+        confirmed_requirements[PREFERENCE_KEY] = package_preference or {"mode": "freeform"}
+        if package_reference:
+            confirmed_requirements[REFERENCE_KEY] = package_reference
 
         user_ppt_service = get_ppt_service_for_user(user.id)
         metadata = dict(project.project_metadata or {})

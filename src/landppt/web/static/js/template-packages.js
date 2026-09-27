@@ -90,9 +90,11 @@
         });
     }
     async function download(pkg) {
-        const manifest=await request(`${api}/${pkg.id}/export`);
-        const url=URL.createObjectURL(new Blob([JSON.stringify(manifest,null,2)],{type:'application/json'}));
-        const a=node('a'); a.href=url; a.download=`${pkg.manifest.package_id}-v${pkg.version}.json`;
+        const response=await fetch(`${api}/${pkg.id}/export`,{credentials:'same-origin'});
+        if(!response.ok) throw new Error('模板包导出失败');
+        const url=URL.createObjectURL(await response.blob());
+        const extension=response.headers.get('Content-Type')?.includes('zip')?'zip':'json';
+        const a=node('a'); a.href=url; a.download=`${pkg.manifest.package_id}-v${pkg.version}.${extension}`;
         (Array.from(document.querySelectorAll('dialog[open]')).at(-1) || document.body).append(a);
         a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000);
     }
@@ -121,7 +123,9 @@
         grid.querySelectorAll('.package-preview-holder').forEach(el=>el.disposePreview?.());
         grid.replaceChildren();
         const filter = document.getElementById('packageFilter').value;
-        const visible = packages.filter(p => filter === 'all' || p.status === filter);
+        const preferred = Number(panel.dataset.preferredVersion || 0);
+        const visible = packages.filter(p => filter === 'all' || p.status === filter)
+            .sort((a, b) => (b.id === preferred) - (a.id === preferred));
         if (!visible.length) grid.append(node('p','还没有模板包。添加内置包，或用 AI 创建自己的设计。','package-empty'));
         for (const pkg of visible) {
             const card = node('article',undefined,'package-card');
@@ -132,6 +136,7 @@
             const badge=node('span',statuses[pkg.status],'package-badge is-'+pkg.status);
             const title=node('div',undefined,'package-card-title'); title.append(node('h3',pkg.template_name),badge);
             body.append(title,meta,node('p',pkg.manifest.description));
+            if(pkg.id===preferred){card.classList.add('is-preferred');body.append(node('p','需求确认时已选择，大纲已按此模板包的版式规划','package-preferred-note'));}
             const actions=node('div',undefined,'package-tools package-card-actions');
             if(panel.dataset.mode==='select' && pkg.status==='published') actions.append(button('使用此模板包快速生成', async()=>{
                 await request(`/api/projects/${encodeURIComponent(project)}/template-package`,'POST',{version_id:pkg.id,options:{allow_images:document.getElementById('packageImages').checked,image_budget:Number(document.getElementById('packageBudget').value)}});
@@ -199,7 +204,20 @@
         document.getElementById('packageInstall').addEventListener('click',async function(){this.disabled=true;try{await request(api+'/builtin','POST');await load();message('内置模板包已添加。');}catch(e){message(e.message,true);}finally{this.disabled=false;}});
         document.getElementById('packageCreate').addEventListener('click',generate);
         document.getElementById('packageFilter').addEventListener('change',render);
-        document.getElementById('packageImport').addEventListener('change',async(e)=>{try{const file=e.target.files[0];if(!file)return;if(file.size>5*1024*1024)throw new Error('模板包文件不能超过 5 MB');await request(api,'POST',{manifest:JSON.parse(await file.text())});await load();message('导入草稿成功，请预览并发布。');}catch(error){message(error.message,true);}finally{e.target.value='';}});
+        document.getElementById('packageImport').addEventListener('change',async(e)=>{try{
+            const file=e.target.files[0];if(!file)return;
+            if(file.name.toLowerCase().endsWith('.zip')){
+                if(file.size>65*1024*1024)throw new Error('模板包 ZIP 不能超过 65 MB');
+                const data=new FormData();data.append('file',file);
+                const response=await fetch('/api/global-master-templates/packages-import',{method:'POST',body:data,credentials:'same-origin'});
+                const result=await response.json();if(!response.ok)throw new Error(result.detail || '导入失败');
+            }else{
+                if(file.size>5*1024*1024)throw new Error('JSON 文件不能超过 5 MB；含底图的模板包请使用 ZIP');
+                await request(api,'POST',{manifest:JSON.parse(await file.text())});
+            }
+            await load();message('导入草稿成功，请预览并发布。');
+        }catch(error){message(error.message,true);}finally{e.target.value='';}});
+        document.getElementById('packagePptxImport')?.addEventListener('click',()=>window.PackagePptxImport.open({onComplete:async pkg=>{await load();openWorkspace(pkg);}}));
         load().catch(e=>message(e.message,true));
     }
     // The editor uses the same structured content endpoint; no HTML string interpolation.

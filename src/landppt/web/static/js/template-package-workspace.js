@@ -81,7 +81,7 @@
         const body = node('div', undefined, 'pw-body'); body.append(rail, stage, chat);
         const progress = node('progress', undefined, 'package-progress'); progress.hidden = true;
         const status = node('div', '', 'package-status pw-status'); status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite');
-        const exportBtn = ui.button('导出 JSON', () => ui.download(pkg));
+        const exportBtn = ui.button('导出模板包', () => ui.download(pkg));
         const publishBtn = ui.button('校验并发布', publish, true);
         const foot = node('footer', undefined, 'pw-foot');
         const footInfo = node('div', undefined, 'pw-foot-info'); footInfo.append(status, progress);
@@ -159,6 +159,15 @@
             selected = c.id;
             setFrame(stageFrame, c.id);
             pageLabel.replaceChildren(node('strong', families[c.family] || c.family), node('span', c.description), node('small', `正文块 ${c.blocks.minimum}–${c.blocks.maximum} · 指标 ${c.metrics.minimum}–${c.metrics.maximum} · 配图 ${c.images.minimum}–${c.images.maximum}`));
+            if(c.reference_asset) pageLabel.append(ui.button('对照原稿',()=>{
+                const asset=pkg.manifest.assets?.find(a=>a.id===c.reference_asset);
+                if(!asset)return;
+                const compare=ui.dialog(`原稿对照 · 第 ${c.source_slide || ''} 页`);
+                const columns=node('div',undefined,'pptx-compare');
+                const original=node('div');const image=node('img');image.src=`data:${asset.media_type};base64,${asset.data}`;image.alt='原稿页面';original.append(node('h3','原稿'),image);
+                const current=node('div');const frame=node('iframe');frame.title='模板包样例';frame.setAttribute('sandbox','');setFrame(frame,c.id);current.append(node('h3','模板包样例'),ui.fitPreview(frame));
+                columns.append(original,current);compare.append(columns,node('p','底图保留原稿装饰。请检查文字位置、字体替换及图片层级；发布后可替换槽位内容。'));
+            }));
             const index = pkg.manifest.components.indexOf(c);
             if (!busy) {
                 upBtn.disabled = index === 0;
