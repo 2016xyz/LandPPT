@@ -9,16 +9,18 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
 from ..auth.middleware import get_current_user_required
+from ..services.slide.package_generation.content_service import llm_timeout
 from ..services.template_package.archive import MAX_ARCHIVE_BYTES, import_archive
 from ..services.template_package.catalog import PackageCatalog
 from ..services.template_package.pptx_analysis import classify_analysis
-from ..services.template_package.pptx_repair import repair_layout
 from ..services.template_package.pptx_import import (
     MAX_UPLOAD,
     ImportOptions,
     analyze_pptx,
     import_pptx,
 )
+from ..services.template_package.pptx_repair import repair_layout
+from ..services.template_package.pptx_vision import reconstruct_layout
 from ..services.template_package.service import validate_package
 
 router = APIRouter(tags=["Template package imports"])
@@ -113,19 +115,21 @@ async def import_with_ai_repair(data, settings, service, progress):
     pending = set()
     lock = threading.Lock()
     stopped = threading.Event()
+    visual = settings is not None and settings.mode == "visual"
+    model_timeout = await llm_timeout(service) if visual else 180
 
-    def repair(component, error):
+    def call_model(coroutine_factory):
         with lock:
             if stopped.is_set():
                 raise ValueError("导入请求已取消")
-            future = asyncio.run_coroutine_threadsafe(
-                repair_layout(component, error, service), loop
-            )
+            future = asyncio.run_coroutine_threadsafe(coroutine_factory(), loop)
             pending.add(future)
         try:
-            return future.result(timeout=180)
+            return future.result(timeout=model_timeout)
         except TimeoutError as exc:
-            raise ValueError("AI 修复请求超时，未保存未通过校验的版式") from exc
+            raise ValueError(
+                f"AI 请求超过 {model_timeout:g} 秒，未保存未通过校验的版式"
+            ) from exc
         except Exception as exc:
             raise ValueError(f"AI 修复未完成：{exc}") from exc
         finally:
@@ -133,9 +137,28 @@ async def import_with_ai_repair(data, settings, service, progress):
             with lock:
                 pending.discard(future)
 
+    def repair(component, error):
+        return call_model(lambda: repair_layout(component, error, service))
+
+    def reconstruct(component, error, reference_url):
+        return call_model(
+            lambda: reconstruct_layout(component, error, reference_url, service)
+        )
+
     try:
         return await run_render(
-            partial(import_pptx, progress=progress, repair=repair), data, settings
+            partial(
+                import_pptx,
+                progress=progress,
+                repair=repair,
+                **(
+                    {"reconstruct": reconstruct}
+                    if settings is not None and settings.mode == "visual"
+                    else {}
+                ),
+            ),
+            data,
+            settings,
         )
     finally:
         with lock:
@@ -149,13 +172,18 @@ async def analyze(
     file: UploadFile = File(...),
     user=Depends(get_current_user_required),
     stream: bool = False,
+    vision: bool = False,
 ):
     data = await upload_bytes(file, MAX_UPLOAD)
 
     async def operation(progress):
         progress("queued", "文件上传完成，正在等待渲染资源")
-        result = await run_render(partial(analyze_pptx, progress=progress), data)
-        return await classify_analysis(result, analysis_service(user.id), progress)
+        result = await run_render(
+            partial(analyze_pptx, progress=progress, vision=vision), data
+        )
+        return await classify_analysis(
+            result, analysis_service(user.id), progress, vision=vision
+        )
 
     if stream:
         return stream_operation(operation)

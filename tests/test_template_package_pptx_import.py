@@ -385,7 +385,7 @@ async def test_upload_routes_require_auth_and_scope_saved_draft(monkeypatch):
 
     monkeypatch.setattr(api, "PackageCatalog", catalog)
 
-    async def classified(result, service, progress):
+    async def classified(result, service, progress, *, vision=False):
         return result
 
     monkeypatch.setattr(api, "classify_analysis", classified)

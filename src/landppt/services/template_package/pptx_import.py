@@ -9,13 +9,16 @@ import math
 import re
 import uuid
 from collections import Counter
+from contextlib import nullcontext
 from io import BytesIO
+from typing import Literal
 from zipfile import ZIP_DEFLATED, BadZipFile, ZipFile
 
 import fitz
 from lxml import etree
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
+from pptx.oxml.ns import qn
 from pydantic import Field
 
 from .pptx_render import render_pdf
@@ -119,6 +122,7 @@ class ImportPage(ContractModel):
 class ImportOptions(ContractModel):
     name: str = Field(min_length=1, max_length=255)
     pages: tuple[ImportPage, ...] = Field(min_length=1, max_length=40)
+    mode: Literal["preserve", "visual"] = "preserve"
 
 
 def normalize_pptx(data):
@@ -212,7 +216,101 @@ def _fit(prs):
     )
 
 
-def _fallback_text_span(shape, paragraph, paragraphs, pdf_scale, scale):
+IDENTITY = (1.0, 1.0, 0.0, 0.0)
+
+
+def _group_transform(group, parent):
+    """Map a group's child coordinate space onto its parent's (a:chOff/a:chExt)."""
+    xfrm = group._element.find(qn("p:grpSpPr")).find(qn("a:xfrm"))
+    parts = [
+        None if xfrm is None else xfrm.find(qn(f"a:{name}"))
+        for name in ("off", "ext", "chOff", "chExt")
+    ]
+    if any(part is None for part in parts):
+        return parent
+    off, ext, ch_off, ch_ext = parts
+    ch_cx, ch_cy = int(ch_ext.get("cx", 0)), int(ch_ext.get("cy", 0))
+    sx = int(ext.get("cx", 0)) / ch_cx if ch_cx else 1.0
+    sy = int(ext.get("cy", 0)) / ch_cy if ch_cy else 1.0
+    tx = int(off.get("x", 0)) - int(ch_off.get("x", 0)) * sx
+    ty = int(off.get("y", 0)) - int(ch_off.get("y", 0)) * sy
+    a, b, c, d = parent
+    return (a * sx, b * sy, a * tx + c, b * ty + d)
+
+
+def walk_shapes(shapes, transform=IDENTITY, rotated=False):
+    """Every shape including group members, with its group transform.
+
+    Groups are common in hand-made decks; skipping them left their sample text
+    in the background, where the leftover-text audit then rejected the page.
+    """
+    for shape in shapes:
+        turned = rotated or bool(getattr(shape, "rotation", 0))
+        yield shape, transform, turned
+        if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
+            yield from walk_shapes(
+                shape.shapes, _group_transform(shape, transform), turned
+            )
+
+
+def find_shape(slide, shape_id):
+    for shape, _, _ in walk_shapes(slide.shapes):
+        if shape.shape_id == shape_id:
+            return shape
+    raise ValueError(f"原稿中找不到对象 {shape_id}")
+
+
+def _emu_box(shape, transform):
+    if None in (shape.left, shape.top, shape.width, shape.height):
+        return None
+    a, b, c, d = transform
+    return (shape.left * a + c, shape.top * b + d, shape.width * a, shape.height * b)
+
+
+def _is_visible(element):
+    """Pictures, lines and filled or outlined shapes paint pixels; text boxes don't."""
+    if element.tag in (qn("p:pic"), qn("p:cxnSp")):
+        return True
+    properties = element.find(qn("p:spPr"))
+    if properties is None:
+        return False
+    paints = ("a:solidFill", "a:gradFill", "a:pattFill", "a:blipFill")
+    if any(properties.find(qn(tag)) is not None for tag in paints):
+        return True
+    line = properties.find(qn("a:ln"))
+    if line is not None and any(line.find(qn(tag)) is not None for tag in paints):
+        return True
+    # Autoshapes without explicit paint take the theme style's fill and line.
+    style = element.find(qn("p:style"))
+    if style is None:
+        return False
+    fill_ref, line_ref = style.find(qn("a:fillRef")), style.find(qn("a:lnRef"))
+    no_fill = properties.find(qn("a:noFill")) is not None
+    no_line = line is not None and line.find(qn("a:noFill")) is not None
+    return (
+        not no_fill and fill_ref is not None and fill_ref.get("idx", "0") != "0"
+    ) or (not no_line and line_ref is not None and line_ref.get("idx", "0") != "0")
+
+
+def _frame_kind(shape):
+    """Graphic frames whose content is sample data rather than decoration."""
+    if shape.shape_type == MSO_SHAPE_TYPE.EMBEDDED_OLE_OBJECT:
+        return "ole"
+    if shape._element.tag != qn("p:graphicFrame"):
+        return None
+    if getattr(shape, "has_chart", False):
+        return "chart"
+    if getattr(shape, "has_table", False):
+        return "table"
+    uri = shape._element.xpath("string(.//a:graphicData/@uri)")
+    if "diagram" in uri:
+        return "diagram"
+    return "ole" if "ole" in uri.lower() else None
+
+
+def _fallback_text_span(
+    frame, emu, frame_scale, paragraph, paragraphs, pdf_scale, scale
+):
     """Estimate a PDF-space span from authored text when extraction misses it."""
     runs = sorted(paragraph.runs, key=lambda run: len(run.text.strip()), reverse=True)
     fonts = [run.font for run in runs if run.text.strip()] + [paragraph.font]
@@ -227,7 +325,7 @@ def _fallback_text_span(shape, paragraph, paragraphs, pdf_scale, scale):
             default,
         )
 
-    size = authored("size", READABLE_SIZE / scale) / pdf_scale
+    size = authored("size", READABLE_SIZE / scale) * frame_scale[1] / pdf_scale
     color = 0x182F36
     for font in fonts:
         try:
@@ -237,11 +335,13 @@ def _fallback_text_span(shape, paragraph, paragraphs, pdf_scale, scale):
         if rgb is not None:
             color = int(str(rgb), 16)
             break
-    frame = shape.text_frame
-    left = (shape.left + frame.margin_left) / pdf_scale
-    top = (shape.top + frame.margin_top) / pdf_scale
-    width = max(1, (shape.width - frame.margin_left - frame.margin_right) / pdf_scale)
-    height = max(1, (shape.height - frame.margin_top - frame.margin_bottom) / pdf_scale)
+    ax, ay = frame_scale
+    left = (emu[0] + frame.margin_left * ax) / pdf_scale
+    top = (emu[1] + frame.margin_top * ay) / pdf_scale
+    width = max(1, (emu[2] - (frame.margin_left + frame.margin_right) * ax) / pdf_scale)
+    height = max(
+        1, (emu[3] - (frame.margin_top + frame.margin_bottom) * ay) / pdf_scale
+    )
     index = next(i for i, (_, item) in enumerate(paragraphs) if item is paragraph)
     top += height * index / len(paragraphs)
     return {
@@ -255,9 +355,139 @@ def _fallback_text_span(shape, paragraph, paragraphs, pdf_scale, scale):
     }
 
 
-def _candidates(prs, slide, page):
+def _paragraph_candidates(shape, emu, transform, spans, prs, page, warnings):
+    """One candidate per non-empty paragraph, styled from the rendered PDF."""
     scale, dx, dy = _fit(prs)
     pdf_scale = prs.slide_width / page.rect.width
+    ax, ay = transform[0], transform[1]
+    ex, ey, ew, eh = emu
+    box = [dx + ex * scale, dy + ey * scale, ew * scale, eh * scale]
+    frame = shape.text_frame
+    paragraphs = [(i, p) for i, p in enumerate(frame.paragraphs) if p.text.strip()]
+    body = shape._element.find(".//" + qn("a:bodyPr"))
+    vertical = body is not None and body.get("vert", "horz") not in ("horz", "")
+    results = []
+    for pindex, paragraph in paragraphs:
+        text = paragraph.text.strip()
+        local_spans = [
+            s
+            for s in spans
+            if ex <= (s["bbox"][0] + s["bbox"][2]) / 2 * pdf_scale <= ex + ew
+            and ey <= (s["bbox"][1] + s["bbox"][3]) / 2 * pdf_scale <= ey + eh
+        ]
+        matches = [
+            s
+            for s in local_spans
+            if s["text"].strip()
+            and (s["text"].strip() in text or text in s["text"].strip())
+        ]
+        fallback = not matches
+        if fallback:
+            matches = [
+                _fallback_text_span(
+                    frame, emu, (ax, ay), paragraph, paragraphs, pdf_scale, scale
+                )
+            ]
+            warnings.append(
+                f"“{text[:24]}”未匹配到 PDF 文字样式，已使用 PPT 原有样式或默认样式继续解析"
+            )
+        main = max(matches, key=lambda s: len(s["text"]))
+        font_size = main["size"] * pdf_scale * scale
+        source_size = font_size
+        issues = []
+        if not math.isfinite(font_size) or font_size <= 0 or font_size > 160:
+            issues.append(
+                "原字号超出槽位范围，需 AI 判断用途；可编辑槽位先采用合法字号"
+            )
+            font_size = (
+                min(160.0, font_size)
+                if math.isfinite(font_size) and font_size > 0
+                else float(READABLE_SIZE)
+            )
+        if len(text) > 2000:
+            issues.append("原文超过单槽位 2000 字上限，需检查用途或拆页；不得截断正文")
+        warnings.extend(f"“{text[:24]}”：{issue}" for issue in issues)
+        if font_size < READABLE_SIZE:
+            # Generated copy must stay readable; small source text is enlarged
+            # instead of being frozen into the background with its sample words.
+            warnings.append(
+                f"“{text[:24]}”原字号 {font_size:.0f}px，作为槽位时放大到 {READABLE_SIZE}px"
+            )
+            font_size = float(READABLE_SIZE)
+        x = box[0] + frame.margin_left * ax * scale
+        y = box[1] + frame.margin_top * ay * scale
+        w = box[2] - (frame.margin_left + frame.margin_right) * ax * scale
+        h = box[3] - (frame.margin_top + frame.margin_bottom) * ay * scale
+        if len(paragraphs) > 1:
+            top = (
+                min(s["origin"][1] for s in matches) * pdf_scale * scale
+                + dy
+                - font_size
+            )
+            bottom = (
+                max(s["origin"][1] for s in matches) * pdf_scale * scale
+                + dy
+                + font_size * 0.3
+            )
+            y, h = top, max(font_size * 1.3, bottom - top)
+        y = max(0, y)
+        h = min(720 - y, max(h, font_size * 1.3))
+        w = min(1280 - x, w)
+        if x < 0 or w <= 0 or h < font_size:
+            warnings.append(f"“{text[:24]}”文字框越界，保留固定内容")
+            continue
+        text_width = (
+            sum(s["bbox"][2] - s["bbox"][0] for s in matches) * pdf_scale * scale
+        )
+        left = min(s["bbox"][0] for s in matches) * pdf_scale * scale + dx
+        align = "left"
+        if paragraph.alignment is not None:
+            align = {2: "center", 3: "right"}.get(int(paragraph.alignment), "left")
+        elif not fallback and abs(left - x - (w - text_width) / 2) < 5:
+            align = "center"
+        elif not fallback and abs(left - x - (w - text_width)) < 5:
+            align = "right"
+        results.append(
+            {
+                "id": f"{shape.shape_id}:{pindex}",
+                "kind": "text",
+                "text": text,
+                "box": [x, y, w, h],
+                "font_size": font_size,
+                "font": (
+                    main["font"]
+                    if fallback
+                    else paragraph.font.name
+                    or next(
+                        (r.font.name for r in paragraph.runs if r.font.name),
+                        main["font"],
+                    )
+                ),
+                "color": f"#{main['color']:06x}",
+                "bold": bool(main["flags"] & 16),
+                "align": align,
+                "valign": {3: "middle", 4: "bottom"}.get(
+                    int(frame.vertical_anchor or 1), "top"
+                ),
+                "suggested": "body",
+                "source_size": source_size if math.isfinite(source_size) else None,
+                "repair_issues": issues,
+                "style_source": "pptx-default" if fallback else "pdf",
+                "shape_id": shape.shape_id,
+                "shape_name": shape.name,
+                "vertical": vertical,
+            }
+        )
+    return results
+
+
+def extract_page(prs, slide, page):
+    """Text paragraphs, pictures and painted shapes of one slide, on the 1280×720 canvas.
+
+    Both import modes start here: manual binding turns the texts into candidates,
+    vision replication hands the same geometry to the model and the slot solver.
+    """
+    scale, dx, dy = _fit(prs)
     spans = [
         span
         for b in page.get_text("dict")["blocks"]
@@ -265,176 +495,91 @@ def _candidates(prs, slide, page):
         for line in b["lines"]
         for span in line["spans"]
     ]
-    candidates, warnings = [], []
-    for shape in slide.shapes:
-        if shape.shape_type == MSO_SHAPE_TYPE.EMBEDDED_OLE_OBJECT:
-            warnings.append(f"嵌入对象“{shape.name}”保留为固定底图，不转换为可编辑槽位")
-            continue
+    texts, pictures, shapes, removed, warnings = [], [], [], [], []
+    for order, (shape, transform, rotated) in enumerate(walk_shapes(slide.shapes)):
         if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
-            warnings.append(f"组合对象“{shape.name}”保留为固定底图")
             continue
-        if shape.rotation:
-            warnings.append(f"旋转对象“{shape.name}”保留为固定底图")
+        emu = _emu_box(shape, transform)
+        if emu is None or emu[2] <= 0 or emu[3] <= 0:
             continue
-        box = [
-            dx + shape.left * scale,
-            dy + shape.top * scale,
-            shape.width * scale,
-            shape.height * scale,
-        ]
-        if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
+        box = [dx + emu[0] * scale, dy + emu[1] * scale, emu[2] * scale, emu[3] * scale]
+        kind = _frame_kind(shape)
+        if kind:
+            removed.append({"id": str(shape.shape_id), "kind": kind, "box": box})
+            if kind == "ole":
+                warnings.append(
+                    f"嵌入对象“{shape.name}”保留为固定底图，不转换为可编辑槽位"
+                )
+            continue
+        is_picture = shape._element.tag == qn("p:pic")
+        shapes.append(
+            {
+                "id": str(shape.shape_id),
+                "name": shape.name,
+                "box": box,
+                "visible": _is_visible(shape._element),
+                "picture": is_picture,
+                "rotated": rotated,
+                "order": order,
+            }
+        )
+        if is_picture:
             geometry = shape._element.xpath(".//a:prstGeom")
             preset = geometry[0].get("prst") if geometry else "rect"
-            crop = {"ellipse": "circle", "roundRect": "rounded"}.get(preset, "rect")
-            candidates.append(
+            pictures.append(
                 {
                     "id": str(shape.shape_id),
                     "kind": "image",
                     "text": shape.name,
                     "box": box,
                     "suggested": "fixed",
-                    "crop": crop,
+                    "crop": {"ellipse": "circle", "roundRect": "rounded"}.get(
+                        preset, "rect"
+                    ),
+                    "rotated": rotated,
+                    "order": order,
                 }
             )
             continue
-        if not shape.has_text_frame:
+        if not getattr(shape, "has_text_frame", False):
             continue
-        frame = shape.text_frame
-        paragraphs = [(i, p) for i, p in enumerate(frame.paragraphs) if p.text.strip()]
-        for pindex, paragraph in paragraphs:
-            text = paragraph.text.strip()
-            local_spans = [
-                s
-                for s in spans
-                if shape.left
-                <= (s["bbox"][0] + s["bbox"][2]) / 2 * pdf_scale
-                <= shape.left + shape.width
-                and shape.top
-                <= (s["bbox"][1] + s["bbox"][3]) / 2 * pdf_scale
-                <= shape.top + shape.height
-            ]
-            matches = [
-                s
-                for s in local_spans
-                if s["text"].strip()
-                and (s["text"].strip() in text or text in s["text"].strip())
-            ]
-            fallback = not matches
-            if fallback:
-                matches = [
-                    _fallback_text_span(shape, paragraph, paragraphs, pdf_scale, scale)
-                ]
-                warnings.append(
-                    f"“{text[:24]}”未匹配到 PDF 文字样式，已使用 PPT 原有样式或默认样式继续解析"
-                )
-            main = max(matches, key=lambda s: len(s["text"]))
-            font_size = main["size"] * pdf_scale * scale
-            source_size = font_size
-            issues = []
-            if not math.isfinite(font_size) or font_size <= 0 or font_size > 160:
-                issues.append(
-                    "原字号超出槽位范围，需 AI 判断用途；可编辑槽位先采用合法字号"
-                )
-                font_size = (
-                    min(160.0, font_size)
-                    if math.isfinite(font_size) and font_size > 0
-                    else float(READABLE_SIZE)
-                )
-            if len(text) > 2000:
-                issues.append(
-                    "原文超过单槽位 2000 字上限，需检查用途或拆页；不得截断正文"
-                )
-            warnings.extend(f"“{text[:24]}”：{issue}" for issue in issues)
-            if font_size < READABLE_SIZE:
-                # Generated copy must stay readable; small source text is enlarged
-                # instead of being frozen into the background with its sample words.
-                warnings.append(
-                    f"“{text[:24]}”原字号 {font_size:.0f}px，作为槽位时放大到 {READABLE_SIZE}px"
-                )
-                font_size = float(READABLE_SIZE)
-            x = box[0] + frame.margin_left * scale
-            y = box[1] + frame.margin_top * scale
-            w = box[2] - (frame.margin_left + frame.margin_right) * scale
-            h = box[3] - (frame.margin_top + frame.margin_bottom) * scale
-            if len(paragraphs) > 1:
-                top = (
-                    min(s["origin"][1] for s in matches) * pdf_scale * scale
-                    + dy
-                    - font_size
-                )
-                bottom = (
-                    max(s["origin"][1] for s in matches) * pdf_scale * scale
-                    + dy
-                    + font_size * 0.3
-                )
-                y, h = top, max(font_size * 1.3, bottom - top)
-            y = max(0, y)
-            h = min(720 - y, max(h, font_size * 1.3))
-            w = min(1280 - x, w)
-            if x < 0 or w <= 0 or h < font_size:
-                warnings.append(f"“{text[:24]}”文字框越界，保留固定内容")
-                continue
-            text_width = (
-                sum(s["bbox"][2] - s["bbox"][0] for s in matches) * pdf_scale * scale
-            )
-            left = min(s["bbox"][0] for s in matches) * pdf_scale * scale + dx
-            align = "left"
-            if paragraph.alignment is not None:
-                align = {2: "center", 3: "right"}.get(int(paragraph.alignment), "left")
-            elif not fallback and abs(left - x - (w - text_width) / 2) < 5:
-                align = "center"
-            elif not fallback and abs(left - x - (w - text_width)) < 5:
-                align = "right"
-            candidates.append(
-                {
-                    "id": f"{shape.shape_id}:{pindex}",
-                    "kind": "text",
-                    "text": text,
-                    "box": [x, y, w, h],
-                    "font_size": font_size,
-                    "font": (
-                        main["font"]
-                        if fallback
-                        else paragraph.font.name
-                        or next(
-                            (r.font.name for r in paragraph.runs if r.font.name),
-                            main["font"],
-                        )
-                    ),
-                    "color": f"#{main['color']:06x}",
-                    "bold": bool(main["flags"] & 16),
-                    "align": align,
-                    "valign": {3: "middle", 4: "bottom"}.get(
-                        int(frame.vertical_anchor or 1), "top"
-                    ),
-                    "suggested": "body",
-                    "source_size": source_size if math.isfinite(source_size) else None,
-                    "repair_issues": issues,
-                    "style_source": "pptx-default" if fallback else "pdf",
-                }
-            )
-    obstacles = []
-    for shape in slide.shapes:
-        if shape.width and shape.height and not shape.rotation:
-            # A filled or outlined text shape is a visible card: text stays inside.
-            try:
-                visible = shape.fill.type not in (None, 5) or bool(
-                    shape.line.fill.type not in (None, 5)
-                )
-            except (AttributeError, NotImplementedError, TypeError, ValueError):
-                visible = False
-            obstacles.append(
-                (
-                    str(shape.shape_id),
-                    [
-                        dx + shape.left * scale,
-                        dy + shape.top * scale,
-                        shape.width * scale,
-                        shape.height * scale,
-                    ],
-                    visible,
-                )
-            )
+        for item in _paragraph_candidates(
+            shape, emu, transform, spans, prs, page, warnings
+        ):
+            item.update(rotated=rotated, order=order)
+            texts.append(item)
+    return {
+        "texts": texts,
+        "pictures": pictures,
+        "shapes": shapes,
+        "removed": removed,
+        "warnings": warnings,
+    }
+
+
+def _candidates(prs, slide, page):
+    data = extract_page(prs, slide, page)
+    warnings = list(data["warnings"])
+    turned = {}
+    for item in (*data["pictures"], *data["texts"]):
+        if item["rotated"] or item.get("vertical"):
+            name = item.get("shape_name") or item["text"]
+            turned.setdefault(item["id"].split(":")[0], name)
+    warnings.extend(f"旋转对象“{name}”保留为固定底图" for name in turned.values())
+    candidates = [
+        {
+            key: value
+            for key, value in item.items()
+            if key not in {"rotated", "order", "shape_id", "shape_name", "vertical"}
+        }
+        for item in sorted(
+            (*data["pictures"], *data["texts"]), key=lambda item: item["order"]
+        )
+        if item["id"].split(":")[0] not in turned
+    ]
+    obstacles = [
+        (s["id"], s["box"], s["visible"]) for s in data["shapes"] if not s["rotated"]
+    ]
     grow_text_boxes(candidates, obstacles)
     for c in candidates:
         if c["kind"] == "text":
@@ -493,7 +638,7 @@ def _analyze(data, progress=None):
     return normalized, prs, doc, fonts
 
 
-def analyze_pptx(data, progress=None):
+def analyze_pptx(data, progress=None, *, vision=False):
     _, prs, doc, fonts = _analyze(data, progress)
     warnings, slides = [], []
     if abs(prs.slide_width / prs.slide_height - 16 / 9) > 0.01:
@@ -522,7 +667,9 @@ def analyze_pptx(data, progress=None):
                     "slide": index + 1,
                     "hidden": slide._element.get("show") == "0",
                     "preview": "data:image/png;base64,"
-                    + base64.b64encode(page_png(doc[index], 640)).decode(),
+                    + base64.b64encode(
+                        page_png(doc[index], 1280 if vision else 640)
+                    ).decode(),
                     "candidates": candidates,
                     "warnings": problems,
                 }
@@ -532,15 +679,19 @@ def analyze_pptx(data, progress=None):
     return {"slides": slides, "warnings": warnings, "max_selected": 40}
 
 
-def import_pptx(data, options, progress=None, repair=None):
+def import_pptx(data, options, progress=None, repair=None, reconstruct=None):
+    if options.mode == "visual" and reconstruct is None:
+        raise ValueError("视觉复刻需要支持图片输入的模板生成模型")
     _, prs, original, _ = _analyze(data, progress)
     try:
-        return _build_package(prs, original, options, progress, repair)
+        return _build_package(prs, original, options, progress, repair, reconstruct)
     finally:
         original.close()
 
 
-def _build_package(prs, original, options, progress=None, repair=None):
+def _build_package(
+    prs, original, options, progress=None, repair=None, reconstruct=None
+):
     if len({p.slide for p in options.pages}) != len(options.pages):
         raise ValueError("不能重复选择同一页")
     assets, plans, failures, warnings = {}, [], [], []
@@ -563,7 +714,7 @@ def _build_package(prs, original, options, progress=None, repair=None):
         if (
             roles["title"] != 1
             or roles["subtitle"] > 1
-            or roles["body"] + roles["heading"] > 40
+            or (options.mode != "visual" and roles["body"] + roles["heading"] > 40)
             or roles["image"] > 8
         ):
             raise ValueError(
@@ -575,7 +726,7 @@ def _build_package(prs, original, options, progress=None, repair=None):
             ) != (candidate["kind"] == "image"):
                 raise ValueError("槽位类型与内容不一致")
             shape_id = int(candidate["id"].split(":")[0])
-            shape = next(s for s in slide.shapes if s.shape_id == shape_id)
+            shape = find_shape(slide, shape_id)
             if role == "image":
                 # Extract a PNG sample without depending on image-library lifetimes.
                 from PIL import Image
@@ -597,7 +748,7 @@ def _build_package(prs, original, options, progress=None, repair=None):
                 continue
             candidate = lookup[key]
             shape_id, _, paragraph = key.partition(":")
-            shape = next(s for s in slide.shapes if s.shape_id == int(shape_id))
+            shape = find_shape(slide, int(shape_id))
             if candidate["kind"] == "text":
                 shape.text_frame.paragraphs[int(paragraph)].clear()
             else:
@@ -611,7 +762,7 @@ def _build_package(prs, original, options, progress=None, repair=None):
                 and choice.bindings.get(candidate["id"], "fixed") == "fixed"
             ):
                 shape_id, paragraph = candidate["id"].split(":")
-                shape = next(s for s in slide.shapes if s.shape_id == int(shape_id))
+                shape = find_shape(slide, int(shape_id))
                 shape.text_frame.paragraphs[int(paragraph)].clear()
         # Remove system fields from slide, layout and master, including inherited fields.
         for container in (slide, slide.slide_layout, slide.slide_layout.slide_master):
@@ -625,6 +776,10 @@ def _build_package(prs, original, options, progress=None, repair=None):
             for c in candidates
             if c["kind"] == "text" and choice.bindings.get(c["id"], "fixed") == "fixed"
         ]
+        if options.mode == "visual":
+            from .pptx_vision import merge_visual_groups
+
+            selected = merge_visual_groups(selected, choice.groups)
         plans.append((choice, selected, reference, fixed_texts))
         warnings.extend(f"第 {choice.slide} 页：{n}" for n in notes)
     # Render only selected pages, in explicit order; hidden slides are made visible.
@@ -639,30 +794,59 @@ def _build_package(prs, original, options, progress=None, repair=None):
         slide._element.set("show", "1")
     output = BytesIO()
     prs.save(output)
-    if progress:
-        progress("background", f"正在渲染 {len(plans)} 页清除示例文字后的底图")
-    background_pdf, _ = render_pdf(output.getvalue())
+    if options.mode == "visual":
+        rendered = nullcontext([original[p.slide - 1] for p, *_ in plans])
+    else:
+        if progress:
+            progress("background", f"正在渲染 {len(plans)} 页清除示例文字后的底图")
+        background_pdf, _ = render_pdf(output.getvalue())
+        rendered = fitz.open(stream=background_pdf, filetype="pdf")
     components, fingerprints = [], set()
-    with fitz.open(stream=background_pdf, filetype="pdf") as backgrounds:
+    with rendered as backgrounds:
         if len(backgrounds) != len(plans):
             raise ValueError("底图页数不匹配，导入已停止")
         for index, (choice, selected, reference, fixed_texts) in enumerate(plans):
             try:
                 if progress:
                     progress(
-                        "validate",
-                        f"正在校验第 {index + 1}/{len(plans)} 个版式（原稿第 {choice.slide} 页）",
+                        "vision" if options.mode == "visual" else "validate",
+                        f"正在准备第 {index + 1}/{len(plans)} 个版式（原稿第 {choice.slide} 页）",
                     )
-                audit_background_text(backgrounds[index], fixed_texts)
-                background = raster_asset(page_png(backgrounds[index]))
+                if options.mode != "visual":
+                    audit_background_text(backgrounds[index], fixed_texts)
+                background = (
+                    reference
+                    if options.mode == "visual"
+                    else raster_asset(page_png(backgrounds[index]))
+                )
                 assets[background.id] = background
                 component = _component(
                     prs, choice, selected, reference.id, background.id
                 )
                 repair_error = None
+                reference_url = (
+                    "data:image/png;base64,"
+                    + base64.b64encode(page_png(backgrounds[index], 1280)).decode()
+                    if options.mode == "visual"
+                    else None
+                )
                 for attempt in range(3):
                     try:
-                        if attempt:
+                        if options.mode == "visual":
+                            if progress:
+                                progress(
+                                    "vision",
+                                    f"AI 正在参考原图复刻第 {choice.slide} 页（第 {attempt + 1}/3 次）",
+                                )
+                            component = reconstruct(
+                                component, repair_error, reference_url
+                            )
+                            if progress:
+                                progress(
+                                    "validate",
+                                    f"正在校验第 {choice.slide} 页视觉复刻结果",
+                                )
+                        elif attempt:
                             if progress:
                                 progress(
                                     "repair",
@@ -688,7 +872,7 @@ def _build_package(prs, original, options, progress=None, repair=None):
                             )
                         break
                     except ValueError as exc:
-                        if repair is None or attempt == 2:
+                        if (repair is None and reconstruct is None) or attempt == 2:
                             raise
                         repair_error = str(exc)
                 signature = hashlib.sha256(
@@ -725,7 +909,11 @@ def _build_package(prs, original, options, progress=None, repair=None):
         package_id="pptx_" + uuid.uuid4().hex,
         version=1,
         name=options.name,
-        description="从本地 PPTX 导入；固定底图 + 可编辑内容槽位",
+        description=(
+            "从本地 PPTX 视觉复刻；可编辑矢量版式"
+            if options.mode == "visual"
+            else "从本地 PPTX 导入；固定底图 + 可编辑内容槽位"
+        ),
         components=tuple(components),
         assets=tuple(a for key, a in assets.items() if key in used),
     )

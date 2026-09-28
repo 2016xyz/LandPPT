@@ -9,7 +9,7 @@ from pathlib import Path
 from playwright.async_api import async_playwright, expect
 
 
-async def check(browser, width, height, output):
+async def check(browser, width, height, output, mode="preserve"):
     context = await browser.new_context(
         base_url="http://localhost:8000", viewport={"width": width, "height": height}
     )
@@ -30,6 +30,7 @@ async def check(browser, width, height, output):
             return Promise.resolve(new Response(new ReadableStream({start(controller) {
                 const emit = event => controller.enqueue(encoder.encode(JSON.stringify(event)+'\\n'));
                 if (String(url).includes('/analyze')) {
+                    window.analyzeVision = String(url).includes('vision=true');
                     const slides = Array.from({length: 10}, (_, i) => ({
                         slide: i + 1, family: 'cover', warnings: [],
                         preview: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="160" height="90"><rect width="160" height="90" fill="white"/></svg>',
@@ -38,15 +39,18 @@ async def check(browser, width, height, output):
                     emit({type: 'complete', result: {slides, warnings: []}});
                     controller.close();
                 } else {
+                    window.importMode = JSON.parse(options.body.get('options')).mode;
                     window.emitImportProgress = emit;
                     window.finishImport = event => { emit(event); controller.close(); };
-                    emit({type: 'progress', stage: 'background', message: '正在渲染 10 页清除示例文字后的底图'});
+                    emit({type: 'progress', stage: window.importMode === 'visual' ? 'vision' : 'background', message: window.importMode === 'visual' ? 'AI 正在参考原图复刻第 3 页（第 1/3 次）' : '正在渲染 10 页清除示例文字后的底图'});
                 }
             }}), {headers: {'Content-Type': 'application/x-ndjson'}}));
         };
         }"""
     )
     modal = page.locator("dialog.pptx-import")
+    await expect(modal.get_by_label("导入方式", exact=True)).to_have_value("visual")
+    await modal.get_by_label("导入方式", exact=True).select_option(mode)
     await modal.locator('input[type="file"]').set_input_files(
         {
             "name": "progress-test.pptx",
@@ -56,13 +60,17 @@ async def check(browser, width, height, output):
     )
     await modal.get_by_role("button", name="分析页面", exact=True).click()
     await expect(modal.locator("details")).to_have_count(10)
+    assert await page.evaluate("window.analyzeVision") == (mode == "visual")
     await modal.evaluate("el => el.scrollTop = el.scrollHeight")
     await modal.get_by_role("button", name="生成模板包草稿", exact=True).click()
     await expect(
         modal.get_by_role("button", name="正在生成…", exact=True)
     ).to_be_disabled()
     status = modal.locator(".package-status")
-    await expect(status).to_contain_text("正在渲染 10 页")
+    await expect(status).to_contain_text(
+        "参考原图复刻" if mode == "visual" else "正在渲染 10 页"
+    )
+    assert await page.evaluate("window.importMode") == mode
 
     async def assert_visible_in_viewport():
         box = await status.bounding_box()
@@ -84,7 +92,9 @@ async def check(browser, width, height, output):
     await expect(status).to_contain_text("第 3 页 AI")
     await expect(status).to_contain_text("已用时 1 秒", timeout=5000)
     await assert_visible_in_viewport()
-    await page.screenshot(path=str(output / f"progress-{width}.png"), full_page=True)
+    await page.screenshot(
+        path=str(output / f"progress-{width}-{mode}.png"), full_page=True
+    )
     await page.evaluate(
         "window.finishImport({type:'error',message:'测试错误：修复未通过校验'})"
     )
@@ -95,7 +105,10 @@ async def check(browser, width, height, output):
     ).to_be_enabled()
     await assert_visible_in_viewport()
     await modal.get_by_role("button", name="生成模板包草稿", exact=True).click()
-    await expect(status).to_contain_text("正在渲染 10 页")
+    await expect(status).to_contain_text(
+        "参考原图复刻" if mode == "visual" else "正在渲染 10 页"
+    )
+    assert await page.evaluate("window.importMode") == mode
     await page.evaluate(
         "window.finishImport({type:'complete',result:{warnings:[],failures:[],partial:false,package:{manifest:{components:[{}]}}}})"
     )
@@ -113,6 +126,8 @@ async def main():
         try:
             await check(browser, 1440, 900, output)
             await check(browser, 390, 844, output)
+            await check(browser, 1440, 900, output, "visual")
+            await check(browser, 390, 844, output, "visual")
         finally:
             await browser.close()
     print(

@@ -5,12 +5,16 @@
         const {node, dialog, button, families} = window.PackageUI;
         const modal = dialog('从 PPTX 创建模板包');
         modal.classList.add('pptx-import');
-        const intro = node('p', 'AI 识别标题、正文、要点分组和装饰；异常文字交由 AI 处理，版式校验失败时自动尝试修复。原主题文字可选择清除，避免带入新内容。', 'pptx-intro');
+        const intro = node('p', '参考原稿生成可复用模板，确认内容用途后保存草稿，再对照原页检查效果。', 'pptx-intro');
         const fileLabel = node('label', '本地演示文件');
         const fileInput = node('input'); fileInput.type='file'; fileInput.accept='.pptx,.potx,.ppsx';
         fileLabel.append(fileInput);
         const nameLabel = node('label','模板包名称'); const name=node('input');name.maxLength=255;name.required=true;nameLabel.append(name);
         const top = node('div',undefined,'pptx-controls');top.append(fileLabel,nameLabel);
+        const modeLabel=node('label','导入方式');modeLabel.className='pptx-mode';
+        const mode=node('select');mode.setAttribute('aria-label','导入方式');
+        for(const [value,label] of [['visual','视觉复刻（推荐）'],['preserve','保留原稿底图']]){const option=node('option',label);option.value=value;mode.append(option);}
+        const modeHint=node('small','AI 参考页面截图重建可编辑版式，允许调整拥挤布局、简化复杂装饰。需要支持图片输入的模板生成模型。');modeLabel.append(mode,modeHint);top.append(modeLabel);
         const status=node('p','支持 PPTX / POTX / PPSX，最大 50 MB。每次最多选择 40 页。','package-status');status.setAttribute('role','status');
         const warnings=node('div',undefined,'pptx-warnings');
         const stages=node('ol',undefined,'pptx-stages');stages.hidden=true;
@@ -35,12 +39,12 @@
         }
         function showWarnings(items){warnings.replaceChildren();if(!items.length)return;const list=node('ul');items.forEach(s=>list.append(node('li',s)));warnings.append(list);}
         async function post(action,data){
-            const steps=action==='analyze'?[['queued','上传文件'],['parse','解析文件'],['render','渲染原稿'],['extract','提取内容'],['ai','AI 识别'],['repair','AI 修复']]:[['queued','上传文件'],['parse','解析文件'],['render','渲染原稿'],['bind','绑定槽位'],['background','生成底图'],['validate','校验版式'],['repair','AI 修复'],['save','保存草稿']];
+            const steps=action==='analyze'?[['queued','上传文件'],['parse','解析文件'],['render','渲染原稿'],['extract','提取内容'],['ai',mode.value==='visual'?'视觉识别':'AI 识别'],['repair','AI 修复']]:[['queued','上传文件'],['parse','解析文件'],['render','渲染原稿'],['bind','绑定槽位'],...(mode.value==='visual'?[['vision','视觉复刻']]:[['background','生成底图']]),['validate','校验版式'],['repair','AI 修复'],['save','保存草稿']];
             stages.replaceChildren(...steps.map(([key,label])=>{const li=node('li',label);li.dataset.stage=key;return li;}));stages.hidden=false;
             started=Date.now();progress('queued','正在上传文件');
             timer=setInterval(()=>{if(busy)status.textContent=`${lastMessage} · 已用时 ${Math.floor((Date.now()-started)/1000)} 秒`;},1000);
             try {
-                const response=await fetch('/api/global-master-templates/packages-pptx/'+action+'?stream=true',{method:'POST',body:data,credentials:'same-origin'});
+                const response=await fetch('/api/global-master-templates/packages-pptx/'+action+'?stream=true&vision='+(mode.value==='visual'),{method:'POST',body:data,credentials:'same-origin'});
                 if(!response.ok){const result=await response.json();throw new Error(typeof result.detail==='string'?result.detail:JSON.stringify(result.detail));}
                 if(!response.body)throw new Error('浏览器无法读取进度，请刷新后重试');
                 const reader=response.body.getReader(),decoder=new TextDecoder();let buffer='',finished=false;
@@ -62,6 +66,11 @@
         fileInput.addEventListener('change',()=>{
             file=fileInput.files[0];name.value=file?.name.replace(/\.[^.]+$/,'') || '';
             rows=[];pages.replaceChildren();warnings.replaceChildren();create.hidden=true;
+        });
+        mode.addEventListener('change',()=>{
+            rows=[];pages.replaceChildren();warnings.replaceChildren();create.hidden=true;stages.hidden=true;
+            modeHint.textContent=mode.value==='visual'?'AI 参考页面截图重建可编辑版式，允许调整拥挤布局、简化复杂装饰。需要支持图片输入的模板生成模型。':'保留复杂装饰作为底图，仅替换已确认槽位。较小的文字区域可能无法容纳新内容。';
+            status.textContent='导入方式已切换，请重新分析页面。';
         });
         async function runAnalyze(){
             if(busy)return;
@@ -88,7 +97,8 @@
                         const line=node('label',undefined,'pptx-binding');
                         const label=node('span',candidate.text);label.title=candidate.text;if(candidate.kind==='text'&&candidate.capacity!==undefined){const cap=node('small',`约 ${candidate.capacity} 字`,'pptx-capacity'+(candidate.capacity<8?' is-small':''));cap.title='按最小可读字号估算，生成内容不能超过此字数';label.append(' ',cap);}
                         const role=node('select');role.setAttribute('aria-label',`${candidate.text.slice(0,30)}的用途`);
-                        const options=candidate.kind==='image'?{fixed:'固定在底图',image:'可替换配图',remove:'清除样例图片'}:{fixed:'固定在底图',remove:'清除样例文字',title:'标题（每页一个）',subtitle:'副标题',heading:'要点小标题',body:'正文 / 要点'};
+                        const fixedLabel=mode.value==='visual'?'装饰参考（不绑定）':'固定在底图';
+                        const options=candidate.kind==='image'?{fixed:fixedLabel,image:'可替换配图',remove:'清除样例图片'}:{fixed:fixedLabel,remove:'清除样例文字',title:'标题（每页一个）',subtitle:'副标题',heading:'要点小标题',body:'正文 / 要点'};
                         Object.entries(options).forEach(([key,value])=>{const option=node('option',value);option.value=key;role.append(option);});role.value=candidate.suggested;
                         bindings[candidate.id]=role;
                         if(candidate.reason){label.append(node('small',`AI：${candidate.reason}`,'pptx-ai-reason'));}
@@ -103,7 +113,7 @@
                     rows.push({slide:slide.slide,pick,family,bindings,groups});pages.append(card);
                 });
                 create.hidden=false;
-                setBusy(false,'AI 识别完成。请展开检查用途和要点分组；“固定”会保留原文，“清除”会移除原主题文字。');
+                setBusy(false,mode.value==='visual'?'视觉识别完成。请确认需要复刻的标题、正文和配图；装饰参考不绑定原主题文字。':'AI 识别完成。请展开检查用途和要点分组；“固定”会保留原文，“清除”会移除原主题文字。');
             }catch(error){setBusy(false,error.message);}
         }
         async function runImport(){
@@ -115,7 +125,7 @@
             setBusy(true,'正在生成底图、绑定内容并校验版式，请稍候…');
             create.textContent='正在生成…';
             try{
-                const data=new FormData();data.append('file',file);data.append('options',JSON.stringify({name:name.value.trim(),pages:choices}));
+                const data=new FormData();data.append('file',file);data.append('options',JSON.stringify({name:name.value.trim(),pages:choices,mode:mode.value}));
                 const result=await post('import',data);
                 showWarnings([...result.warnings,...result.failures.map(f=>`第 ${f.slide} 页未导入：${f.error}`)]);
                 setBusy(false,`已保存 ${result.package.manifest.components.length} 个版式到草稿${result.partial?'，部分页面未通过校验':''}。请对照原稿检查后发布。`);
