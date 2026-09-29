@@ -9,9 +9,14 @@
     </div>
     <div class="package-status" id="packageStatus" role="status" aria-live="polite"></div>
     <div class="package-grid" id="packageGrid"></div>
+    <nav class="package-pagination" id="packagePagination" aria-label="模板包分页" hidden>
+        <span id="packagePageInfo" role="status" aria-live="polite"></span>
+        <label>每页 <select id="packagePageSize" aria-label="每页模板包版本数量"><option value="6">6 个版本</option><option value="12">12 个版本</option><option value="24">24 个版本</option></select></label>
+        <div class="package-page-buttons" id="packagePageButtons"></div>
+    </nav>
     <div class="package-settings-link"><span>决策模型（如 Jev）可辅助匹配版式，也可使用默认匹配方式。</span><a href="/ai-config#jev-config">决策模型配置 <span aria-hidden="true">→</span></a></div>
 </section>
-<link rel="stylesheet" href="/static/css/template-packages.css?v=20260928-vision">
-<script src="/static/js/template-packages.js?v=20260926-cap" defer></script>
+<link rel="stylesheet" href="/static/css/template-packages.css?v=20260929-pagination">
+<script src="/static/js/template-packages.js?v=20260929-pagination" defer></script>
 <script src="/static/js/template-package-workspace.js?v=20260926-pptx" defer></script>
 <script src="/static/js/template-package-pptx.js?v=20260928-vision" defer></script>

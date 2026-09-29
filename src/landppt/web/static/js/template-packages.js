@@ -6,6 +6,8 @@
     const statuses = {draft:'草稿', validated:'已校验', published:'可用版本', retired:'已停用'};
     const families = {cover:'封面', section:'章节', points:'要点', comparison:'对比', process:'流程', image:'图文', metrics:'指标', summary:'总结'};
     let packages = [];
+    let currentPage = 1;
+    let pageSize = 6;
     async function request(url, method='GET', data) {
         const response = await fetch(url, {method, credentials:'same-origin', headers:{'Content-Type':'application/json'}, body:data === undefined ? undefined : JSON.stringify(data)});
         const body = await response.json();
@@ -118,6 +120,45 @@
         if(!window.PackageWorkspace) throw new Error('编辑器加载失败，请刷新页面后重试。');
         window.PackageWorkspace.open(pkg,{packages,onChange:()=>load().catch(e=>message(e.message,true))});
     }
+    function renderPagination(total) {
+        const pagination = document.getElementById('packagePagination');
+        const pages = Math.max(1, Math.ceil(total / pageSize));
+        currentPage = Math.min(currentPage, pages);
+        pagination.hidden = total === 0;
+        document.getElementById('packagePageInfo').textContent = total
+            ? `${(currentPage - 1) * pageSize + 1}–${Math.min(currentPage * pageSize, total)} / 共 ${total} 个版本 · 第 ${currentPage}/${pages} 页`
+            : '共 0 个版本';
+        const controls = document.getElementById('packagePageButtons');
+        controls.replaceChildren();
+        function pageButton(label, target, disabled=false) {
+            const el = node('button', label);
+            el.type = 'button'; el.disabled = disabled;
+            if (typeof label === 'number') {
+                el.setAttribute('aria-label', `第 ${target} 页`);
+                if (target === currentPage) el.setAttribute('aria-current', 'page');
+            }
+            el.addEventListener('click', () => {
+                currentPage = target;
+                render();
+                // Start reading the new cards; keep keyboard focus in the list.
+                const grid = document.getElementById('packageGrid');
+                grid.tabIndex = -1;
+                grid.focus({preventScroll:true});
+                panel.scrollIntoView({block:'start'});
+            });
+            controls.append(el);
+        }
+        pageButton('上一页', currentPage - 1, currentPage === 1);
+        const start = Math.max(1, Math.min(currentPage - 2, pages - 4));
+        const numbers = [...new Set([1, ...Array.from({length:Math.min(5,pages)}, (_, i) => start + i), pages])].sort((a,b)=>a-b);
+        let previous = 0;
+        for (const value of numbers) {
+            if (previous && value - previous > 1) controls.append(node('span', '…'));
+            pageButton(value, value);
+            previous = value;
+        }
+        pageButton('下一页', currentPage + 1, currentPage === pages);
+    }
     function render() {
         const grid = document.getElementById('packageGrid');
         grid.querySelectorAll('.package-preview-holder').forEach(el=>el.disposePreview?.());
@@ -126,8 +167,9 @@
         const preferred = Number(panel.dataset.preferredVersion || 0);
         const visible = packages.filter(p => filter === 'all' || p.status === filter)
             .sort((a, b) => (b.id === preferred) - (a.id === preferred));
-        if (!visible.length) grid.append(node('p','还没有模板包。添加内置包，或用 AI 创建自己的设计。','package-empty'));
-        for (const pkg of visible) {
+        renderPagination(visible.length);
+        if (!visible.length) grid.append(node('p',packages.length ? '没有符合条件的模板包版本，请切换筛选条件。' : '还没有模板包。添加内置包，或用 AI 创建自己的设计。','package-empty'));
+        for (const pkg of visible.slice((currentPage - 1) * pageSize, currentPage * pageSize)) {
             const card = node('article',undefined,'package-card');
             const cover = node('div',undefined,'package-card-preview'); const frame=node('iframe');
             frame.src=`${api}/${pkg.id}/preview/${encodeURIComponent(pkg.manifest.components[0].id)}?h=${pkg.content_hash.slice(0,12)}`; frame.title=pkg.template_name+'预览'; frame.loading='lazy'; frame.setAttribute('sandbox',''); frame.tabIndex=-1; cover.append(fitPreview(frame));
@@ -203,7 +245,8 @@
     if(panel){
         document.getElementById('packageInstall').addEventListener('click',async function(){this.disabled=true;try{await request(api+'/builtin','POST');await load();message('内置模板包已添加。');}catch(e){message(e.message,true);}finally{this.disabled=false;}});
         document.getElementById('packageCreate').addEventListener('click',generate);
-        document.getElementById('packageFilter').addEventListener('change',render);
+        document.getElementById('packageFilter').addEventListener('change',()=>{currentPage=1;render();});
+        document.getElementById('packagePageSize').addEventListener('change',e=>{pageSize=Number(e.target.value);currentPage=1;render();});
         document.getElementById('packageImport').addEventListener('change',async(e)=>{try{
             const file=e.target.files[0];if(!file)return;
             if(file.name.toLowerCase().endsWith('.zip')){

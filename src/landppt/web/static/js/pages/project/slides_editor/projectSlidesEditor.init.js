@@ -101,18 +101,16 @@ function updateMainPreviewArea() {
         // 如果有幻灯片数据，更新预览区域
         previewPane.innerHTML = `
             <div class="slide-frame-container">
+                <button class="preview-nav-btn left" id="previewPrevBtn" onclick="navigatePreviewSlide(-1)" title="&#19978;&#19968;&#39029; (&#8592;)">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
                 <div class="slide-frame-wrapper" id="slideFrameWrapper">
-                    <button class="preview-nav-btn left" id="previewPrevBtn" onclick="navigatePreviewSlide(-1)" title="&#19978;&#19968;&#39029; (&#8592;)">
-                        <i class="fas fa-chevron-left"></i>
-                    </button>
-
                     <iframe class="slide-frame" id="slideFrame"
                             title="Slide Preview"></iframe>
-
-                    <button class="preview-nav-btn right" id="previewNextBtn" onclick="navigatePreviewSlide(1)" title="&#19979;&#19968;&#39029; (&#8594;)">
-                        <i class="fas fa-chevron-right"></i>
-                    </button>
                 </div>
+                <button class="preview-nav-btn right" id="previewNextBtn" onclick="navigatePreviewSlide(1)" title="&#19979;&#19968;&#39029; (&#8594;)">
+                    <i class="fas fa-chevron-right"></i>
+                </button>
             </div>
         `;
 

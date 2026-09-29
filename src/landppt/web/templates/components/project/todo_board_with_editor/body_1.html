@@ -1,37 +1,15 @@
-    <div class="main-container">
+    <div class="main-container generator-workspace">
         <!-- Header -->
         <div class="header">
             <div class="header-content">
                 <div class="header-left">
-                    <div class="header-icon">
-                        <i class="fas fa-tasks"></i>
-                    </div>
+                    <a href="/projects" class="generator-back" aria-label="返回项目列表" title="返回项目列表"><i class="fas fa-arrow-left" aria-hidden="true"></i></a>
                     <div class="header-text">
-                        <h2>{{ todo_board.title }}</h2>
-                        <div class="header-subtitle">
-                            <i class="fas fa-chart-line"></i>
-                            项目进度跟踪与实时编辑
-                        </div>
+                        <div class="header-subtitle">PPT 智能生成器</div>
+                        <h2 title="{{ todo_board.title }}">{{ todo_board.title }}</h2>
                     </div>
                 </div>
-                <div class="header-controls">
-                    <a href="/projects" class="btn btn-outline-light" onclick="return true;">
-                        <i class="fas fa-arrow-left"></i>
-                        返回项目列表
-                    </a>
-                </div>
-            </div>
-        </div>
-
-        <div class="content-area">
-            <!-- Editor Section -->
-            <div class="editor-section">
-                <div class="editor-toolbar">
-                    <div class="toolbar-title">
-                        <i class="fas fa-magic fa-2x"></i>
-                        <h4>PPT 智能生成器</h4>
-                    </div>
-                    <div class="btn-group-custom">
+                    <div class="btn-group-custom generator-actions" role="group" aria-label="幻灯片生成与查看">
                         <button class="btn btn-primary" id="startBtn">
                             <i class="fas fa-play"></i> 开始生成
                         </button>
@@ -51,28 +29,36 @@
                             <i class="fas fa-display"></i> 幻灯片放映
                         </button>
                     </div>
-                </div>
+            </div>
+        </div>
 
+        <div class="content-area">
+            <div class="editor-section">
+
+                {% with generation_mode_compact=true %}
                 {% include "components/project/generation_mode_entry.html" %}
+                {% endwith %}
 
                 <!-- 无人值守任务监控面板（无任务时保持隐藏） -->
                 <div id="unattendedMonitor" hidden></div>
 
                 <!-- Generation Status -->
                 <div class="status-indicator" id="generationStatus" style="display: none;">
+                    <div class="generation-status-row">
                     <h6><i class="fas fa-cogs"></i> 生成状态</h6>
-                    <div id="statusMessage">准备开始生成...</div>
-                    <div class="progress mt-3">
-                        <div class="progress-bar progress-bar-striped progress-bar-animated" id="generationProgress"
-                            style="width: 0%"></div>
-                    </div>
+                    <div id="statusMessage" role="status" aria-live="polite">准备开始生成...</div>
                     <!-- 连接状态指示器 -->
-                    <div class="connection-status-container mt-2">
+                    <div class="connection-status-container">
                         <div id="connectionStatus" class="connection-status disconnected">
                             <span
                                 style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#ef4444;"></span>
                             未连接
                         </div>
+                    </div>
+                    </div>
+                    <div class="progress">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" id="generationProgress"
+                            style="width: 0%"></div>
                     </div>
                 </div>
 

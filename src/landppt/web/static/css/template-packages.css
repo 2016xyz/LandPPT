@@ -40,6 +40,14 @@
 .package-status:empty { display: none; }
 .package-status.error { color: #b91c1c; }
 .package-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 20px; align-items: start; }
+.package-pagination { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 20px; margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--border-color, #e5e7eb); font-size: .82rem; }
+.package-pagination[hidden] { display: none; }
+.package-pagination > span { color: var(--text-secondary, #6b7280); margin-right: auto; }
+.package-pagination label, .package-page-buttons { display: flex; align-items: center; gap: 8px; margin: 0; }
+.package-page-buttons { flex-wrap: wrap; }
+.package-page-buttons button[aria-current=page] { color: #fff; background: #111; border-color: #111; }
+.package-page-buttons button:disabled { cursor: not-allowed; }
+@media (max-width: 600px) { .package-pagination > span { flex-basis: 100%; } .package-page-buttons { width: 100%; gap: 6px; } .package-page-buttons button { padding: 8px 10px; } }
 .package-card { min-width: 0; background: #fff; border: 1px solid var(--border-color, #e5e7eb); border-radius: 14px; overflow: visible; box-shadow: 0 2px 6px rgb(15 23 42 / 3%); }
 .package-card-preview { overflow: hidden; border-radius: 13px 13px 0 0; background: #f5f5f5; position: relative; aspect-ratio: 16/9; border-bottom: 1px solid var(--border-color, #e5e7eb); }
 .package-card iframe { width: 1280px; height: 720px; transform-origin: top left; border: 0; pointer-events: none; }
