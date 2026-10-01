@@ -99,7 +99,7 @@ NetworkPolicy allows are additive. The dedicated deny policy is rendered even
 when the general policy is disabled. Keep registry credentials in
 `imagePullSecrets` when GHCR packages are private.
 
-The initial renderer `latest` tag in `values-argocd.yaml` bootstraps the first CI
-publication. That first build must finish before the new renderer can start;
-subsequent CI updates pin both images to a matching commit. Chart changes alone
-are reconciled by Argo CD and do not rebuild the images.
+The Argo CD overlay pins both images to matching immutable `git-<commit>` tags.
+For a fresh installation, select a commit whose application and renderer builds
+have both completed before syncing the deployment. CI updates both image entries
+together. Chart changes alone are reconciled by Argo CD and do not rebuild images.

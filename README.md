@@ -11,6 +11,8 @@
 
 **中文** | [English](README_EN.md)
 
+当前版本：**0.3.3**。
+
 <div align="center">
   <img src="https://img.pub/p/e810c5680509b4f051a5.png" width="160" alt="LandPPT Logo" />
   <p><b>主题 / 文档 → 大纲 → HTML PPT → 讲稿 / 配音 / 导出</b></p>
@@ -23,6 +25,7 @@
 | 能力 | 说明 |
 |------|------|
 | 一键生成 | 主题到完整 PPT，支持并行生成 |
+| 快速模式 | AI 生成内容，自动匹配可复用模板包版式并填充 SVG |
 | 智能配图 | 本地图库 / 网络图库 / AI 生成三源融合 |
 | 深度研究 | Tavily + SearXNG，实时抓取并摘要网络信息 |
 | 讲稿与视频 | 演讲稿 + Edge-TTS 逐页讲解，可导出 1080p 视频 |
@@ -41,6 +44,7 @@
 - [依赖与能力边界](#依赖与能力边界)
 - [快速开始](#快速开始)
 - [使用指南](#使用指南)
+- [快速模式与模板包](#5-快速模式与模板包)
 - [配置说明](#配置说明)
 - [常见问题](#常见问题)
 - [贡献指南](#贡献指南)
@@ -60,7 +64,7 @@ LandPPT 将「写大纲 → 做版式 → 配图 → 写讲稿 → 导出」整�
 5. **交付**：导出多格式，或生成公开分享链接（含讲解音频与字幕）
 
 **本地默认：** SQLite + 内存缓存，一条命令即可试用，无需 PostgreSQL / Valkey。  
-**生产推荐：** `docker compose` 编排 Web + Worker + PostgreSQL + Valkey + MinIO。
+**生产推荐：** `docker compose` 编排 Web + Worker + PostgreSQL + Valkey + MinIO + PPTX 渲染器。
 
 ---
 
@@ -91,11 +95,22 @@ LandPPT 将「写大纲 → 做版式 → 配图 → 写讲稿 → 导出」整�
 - 四阶段工作流：需求确认 → 大纲 → 任务追踪 → PPT 生成  
 - 阶段重跑与恢复；可视化大纲；一键公开分享  
 
+### 快速模式模板包
+
+- 同一模板包包含封面、目录、正文、图文、总结等版式；AI 生成内容后自动匹配并填充 SVG 组件。
+- 支持添加内置包、导入模板包文件、从 PPTX 创建和 AI 创建；PPTX 导入可选“视觉复刻”或“保留原稿底图”。
+- 模板包名称和描述可编辑；工作区支持单页新增、复制、移动、删除、AI 修改，以及整包 AI 多轮编辑和流式回复。
+- 草稿校验后发布，项目固定使用已选版本；修改已发布包会创建新草稿，已有项目继续使用原版本。
+- 项目可修改结构化内容、切换版式、替换图片和锁定页面；决策模型支持 Jev / TypeSafe 或 OpenAI 兼容协议，也可使用现有模型或规则选择版式。
+
+使用步骤和能力边界见下方 [快速模式与模板包](#5-快速模式与模板包)，模块说明见 [模板包文档](src/landppt/services/template_package/README.md)。
+
 ### 平台与运维
 
 - Docker 单容器 / Compose 多服务；后台任务（PDF / PPTX / 讲解视频）异步执行  
 - 本地账号、GitHub / Linux Do OAuth、邮件验证、注册限流  
 - 可选积分系统、SMTP / Resend、Cloudflare Turnstile  
+- CI/CD 同时发布应用与 PPTX 渲染器镜像；Helm 提供共享存储和渲染器网络隔离，Argo CD 完整同步先迁移数据库再更新应用。
 
 ---
 
@@ -158,6 +173,7 @@ LandPPT 将「写大纲 → 做版式 → 配图 → 写讲稿 → 导出」整�
 | 本地模型 | Ollama 等 | 可选，可完全离线推理 |
 | 深度研究 | `TAVILY_API_KEY` 或 SearXNG | 可选 |
 | 网络 / AI 配图 | 对应图库或生图 Key + `ENABLE_IMAGE_SERVICE=true` | 可选，默认关闭 |
+| 从 PPTX 创建模板包 | 独立 LibreOffice 渲染器 + 模板生成模型 | Compose 已包含渲染器；视觉复刻需要支持图片输入的模型 |
 | **标准可编辑 PPTX** | **`APRYSE_LICENSE_KEY`（商业许可）** | **可选但导出可编辑 PPTX 时必需** |
 | 图片型 PPTX | 无 Apryse | 保真高，页内元素通常不可再编辑 |
 | 讲解视频 | `ffmpeg`；可选 ComfyUI TTS | 可选 |
@@ -185,6 +201,16 @@ LandPPT 将「写大纲 → 做版式 → 配图 → 写讲稿 → 导出」整�
 - 默认启动时自动检测并执行迁移；可用 `LANDPPT_AUTO_MIGRATE_ON_STARTUP=false` 关闭  
 - 本地默认 SQLite；仅在设置 `DATABASE_URL` 时切换到 PostgreSQL 等  
 - 多节点共享同一数据库时，建议关闭自动迁移，改为单独跑一次迁移作业  
+
+升级到模板包功能需要迁移 `019`，它会为旧模板补充类型字段并创建包版本等表，保留已有模板。仅创建表不能更新已有表的字段。关闭启动迁移时，请在启动新版本前执行：
+
+```bash
+uv run python -m landppt.cli migrate
+# 已运行的 Compose 部署：
+# docker compose exec landppt python -m landppt.cli migrate
+```
+
+仓库的 Argo CD 配置会先准备数据库与配置，再执行迁移 Job，成功后才更新 Web / Worker；请使用完整应用同步。迁移失败排查及 Helm 配置见 [部署说明](deploy/README.md#helm-and-argo-cd)。
 
 ### 方式一：uv（推荐本地）
 
@@ -246,7 +272,7 @@ docker logs -f landppt
 
 ### 方式四：Docker Compose（推荐生产）
 
-仓库内 `docker-compose.yml` 会启动 **landppt（Web）+ worker + PostgreSQL + Valkey + MinIO**（`minio-init` 自动建桶），适合多用户与后台任务。本地轻量体验仍推荐直接 `python run.py`。
+仓库内 `docker-compose.yml` 会启动 **landppt（Web）+ worker + PostgreSQL + Valkey + MinIO + pptx-renderer**（`minio-init` 自动建桶），适合多用户与后台任务。本地轻量体验仍推荐直接 `python run.py`。
 
 ```bash
 cp .env.example .env
@@ -261,6 +287,8 @@ docker compose logs -f landppt
 - 生产默认关闭管理员自动初始化；首次部署请设置 `LANDPPT_BOOTSTRAP_ADMIN_ENABLED=true` 及对应账号密码  
 - 镜像默认 `bradleylzh/landppt:latest`，可用 `LANDPPT_IMAGE` 覆盖  
 - PPTX 渲染镜像可用 `LANDPPT_PPTX_RENDERER_IMAGE` 覆盖；匹配版本与 Helm/Argo CD 配置见 [部署说明](deploy/README.md)。
+
+Web、Worker 和渲染器通过共享目录交换 PPTX 渲染任务，渲染器无需开放 HTTP 端口。生产 Compose 使用已发布镜像，开发 Compose 本地构建渲染器。源码或单容器部署需要另行启动 [独立渲染器](docker-compose-pptx-renderer.yaml)，让应用的 `LANDPPT_PPTX_RENDER_SPOOL` 指向同一目录，并对齐目录权限和容器用户。
 
 ### 方式五：开发热重载
 
@@ -313,7 +341,19 @@ docker compose -f docker-compose-dev.yaml logs -f landppt
 - 导出 PDF、HTML、**标准 PPTX**、**图片型 PPTX**、讲稿等  
 - 一键公开分享（分享页支持讲解音频与字幕）  
 
-### 5. 自动化接口
+### 5. 快速模式与模板包
+
+1. 打开“模板管理 → 快速模式模板包”，或访问 `/global-master-templates?tab=packages`。
+2. 添加内置包、导入已有包，或通过“从 PPTX 创建”“AI 创建模板包”制作草稿。
+3. 在工作区预览、编辑名称和描述、调整页面，或用 AI 修改单页及整包；校验通过后发布。
+4. 创建项目并确认大纲，在模板选择页选择“快速模式生成”和已发布版本，设置配图与图片上限，点击“使用此模板包快速生成”。
+5. 生成后在编辑器中通过“内容与版式”修改文字、切换组件或替换图片，再使用现有导出和分享入口。
+
+PPTX 的“视觉复刻”由 AI 参考原页图片重建可编辑版式，可能调整拥挤布局或简化装饰；“保留原稿底图”将复杂图形保留为固定背景，只替换确认的内容槽位。两种方式都需要提取到的可编辑文字，不保证对扫描图片或嵌入图表进行完整 OCR。当前支持 `.pptx` / `.potx` / `.ppsx`，文件最大 50 MB，每次最多选择 40 页。
+
+启用积分系统且实际 AI 提供者为 `landppt` 时，“从 PPTX 创建”和“AI 创建模板包”按 **每次 AI 调用 3 积分**计费，包含规划、识别、设计、修复及实际发起的重试。已发起后失败或取消的调用仍计费；余额不足会停止后续调用。其他提供者、关闭积分系统，以及未调用 AI 的解析、渲染、保存和导入步骤不扣创建积分。模板包 AI 编辑和项目生成沿用各自计费规则，详见 [模板包创建积分](src/landppt/services/template_package/README.md#模板包创建积分)。
+
+### 6. 自动化接口
 
 - API Key 鉴权，便于接入 CI、脚本、n8n 等  
 - OpenAI 兼容：`/v1/chat/completions`、`/v1/completions`、`/v1/models`  
@@ -437,13 +477,21 @@ OpenAI GPT（及兼容接口）、Anthropic Claude、Google Gemini、Azure OpenA
 | 标准 PPTX | `APRYSE_LICENSE_KEY` | 适合继续在 PowerPoint 中编辑 |
 | 图片型 PPTX | 无 Apryse | 复杂版式保真更好，页内元素通常不可编辑 |
 
+### Q: 快速模式需要单独配置 Jev 吗？
+
+不需要。快速模式仍使用配置的 AI 模型生成内容，版式选择可使用现有模型或规则。需要专门的决策模型时，在“系统配置 → 决策模型配置”中设置协议、完整端点 URL、模型和密钥，并测试连接。
+
+### Q: 升级后模板列表或模板包接口报 500？
+
+先查看应用日志和迁移 Job 日志，确认迁移 `019` 已完成。旧库缺少 `template_kind` 等字段时，普通模板和模板包查询都会失败；按 [数据库迁移](#数据库迁移) 执行迁移，再重试接口。Argo CD 部署需要完整同步以执行迁移 hook，具体命令见 [部署说明](deploy/README.md#helm-and-argo-cd)。
+
 ### Q: 如何生成公开分享链接？
 
 项目编辑页点击分享，或调用 `POST /api/projects/{project_id}/share/generate`。地址形如 `/share/{share_token}`；停用调用 `share/disable`。
 
 ### Q: 生产与开发编排如何选？
 
-- **生产：** `docker compose up -d`（预构建镜像 + Web/Worker/Postgres/Valkey/MinIO）  
+- **生产：** `docker compose up -d`（预构建镜像 + Web/Worker/Postgres/Valkey/MinIO/PPTX 渲染器）
 - **开发：** `docker compose -f docker-compose-dev.yaml up -d --build`（本地构建 + 热重载）  
 
 ### Q: 讲解音频支持哪些方式？
