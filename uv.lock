@@ -1734,7 +1734,7 @@ wheels = [
 
 [[package]]
 name = "landppt"
-version = "0.5.3"
+version = "0.3.3"
 source = { editable = "." }
 dependencies = [
     { name = "aiofiles" },

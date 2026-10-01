@@ -113,12 +113,13 @@ def test_updater_changes_both_images_and_preserves_other_settings():
 @pytest.mark.parametrize("defect", ["missing", "duplicate"])
 def test_updater_rejects_incomplete_or_ambiguous_image_settings(defect):
     text = (ROOT / "helm/landppt/values-argocd.yaml").read_text(encoding="utf-8")
+    tag_line = next(
+        line for line in text.splitlines(keepends=True) if line.startswith("    tag:")
+    )
     if defect == "missing":
-        text = text.replace("    tag: latest\n", "")
+        text = text.replace(tag_line, "", 1)
     else:
-        text = text.replace(
-            "    tag: latest\n", "    tag: latest\n    tag: duplicate\n"
-        )
+        text = text.replace(tag_line, tag_line + "    tag: duplicate\n", 1)
     with pytest.raises(ValueError):
         updater.update_images(text, "app", "renderer", "git-test")
 

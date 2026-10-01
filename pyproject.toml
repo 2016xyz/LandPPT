@@ -1,6 +1,6 @@
 [project]
 name = "landppt"
-version = "0.5.3"
+version = "0.3.3"
 description = "AI-powered PPT generation platform with OpenAI-compatible API"
 readme = "README.md"
 requires-python = ">=3.11"
