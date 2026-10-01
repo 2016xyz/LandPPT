@@ -43,6 +43,29 @@ locally running Python application.
 
 ## Helm and Argo CD
 
+The Argo CD overlay runs `python -m landppt.cli migrate-and-bootstrap` as a
+`Sync` hook in wave 1. ConfigMaps, Secrets, PostgreSQL and other dependencies
+remain in wave 0; Web and Worker Deployments run in wave 2. A failed migration
+blocks rollout. `BeforeHookCreation,HookSucceeded` recreates the named Job on
+each sync and removes successful Jobs, avoiding immutable Job update errors.
+Application startup migration remains disabled so replicas do not race schema
+updates. Use a full application sync; selective resource sync skips hooks.
+See [Argo CD sync phases and waves](https://argo-cd.readthedocs.io/en/stable/user-guide/sync-waves/).
+
+Upgrading databases from before template packages requires migration `019`,
+which adds `global_master_templates.template_kind` and package tables while
+preserving existing templates. `create_all` alone does not add this column to
+an existing table. If it is missing, both ordinary template queries and package
+queries fail. To repair a deployment before its next full sync, run the existing
+migration command from an application container:
+
+```sh
+kubectl -n landppt exec deployment/landppt -- python -m landppt.cli migrate
+```
+
+The command is idempotent. Diagnose failed syncs using the retained migration
+Job logs (`kubectl -n landppt logs job/landppt-migrate`).
+
 `pptxRenderer.enabled` defaults to true. The chart creates a renderer Deployment,
 a dedicated spool PVC and an ingress/egress deny-all NetworkPolicy. Web and
 Worker mount the same claim and receive the spool path explicitly. The renderer

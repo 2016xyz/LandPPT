@@ -247,10 +247,6 @@ class AuthMiddleware:
                     request.state.user = user
                     current_user_id.set(user.id)
 
-                    # Continue with request
-                    response = await call_next(request)
-                    return response
-
                 finally:
                     if db is not None:
                         db.close()
@@ -265,6 +261,10 @@ class AuthMiddleware:
                     )
                 else:
                     return RedirectResponse(url="/auth/login", status_code=302)
+
+            # Endpoint failures belong to the application's exception handling,
+            # not to authentication resolution or its database session.
+            return await call_next(request)
         finally:
             current_base_url.reset(base_url_token)
             current_user_id.reset(ctx_token)

@@ -6,6 +6,10 @@ metadata:
   labels:
     {{- include "landppt.labels" . | nindent 4 }}
     app.kubernetes.io/component: worker
+  {{- with .Values.worker.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   {{- if not .Values.worker.autoscaling.enabled }}
   replicas: {{ .Values.worker.replicaCount }}

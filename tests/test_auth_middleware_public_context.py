@@ -60,10 +60,14 @@ def _fake_get_db():
 
 
 @pytest.mark.asyncio
-async def test_public_page_populates_request_state_user_when_session_is_valid(monkeypatch):
+async def test_public_page_populates_request_state_user_when_session_is_valid(
+    monkeypatch,
+):
     middleware = AuthMiddleware()
     middleware.auth_service = _FakeAuthService(user=_FakeUser(user_id=7))
-    monkeypatch.setattr(middleware, "_get_user_from_session_cache", _fake_cached_session_none)
+    monkeypatch.setattr(
+        middleware, "_get_user_from_session_cache", _fake_cached_session_none
+    )
     monkeypatch.setattr(auth_middleware_module, "get_db", _fake_get_db)
 
     request = _build_request("/sponsors", "session_id=valid-session")
@@ -79,7 +83,9 @@ async def test_public_page_populates_request_state_user_when_session_is_valid(mo
 async def test_public_page_skips_optional_auth_for_static_assets(monkeypatch):
     middleware = AuthMiddleware()
     middleware.auth_service = _FakeAuthService(user=_FakeUser(user_id=9))
-    monkeypatch.setattr(middleware, "_get_user_from_session_cache", _fake_cached_session_none)
+    monkeypatch.setattr(
+        middleware, "_get_user_from_session_cache", _fake_cached_session_none
+    )
     monkeypatch.setattr(auth_middleware_module, "get_db", _fake_get_db)
 
     request = _build_request("/static/images/logo.png", "session_id=valid-session")
@@ -88,3 +94,57 @@ async def test_public_page_skips_optional_auth_for_static_assets(monkeypatch):
     assert response.status_code == 200
     assert request.state.user is None
     assert middleware.auth_service.session_calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "path", ["/api/global-master-templates/packages", "/dashboard"]
+)
+async def test_authenticated_route_errors_are_not_reported_as_auth_errors(
+    monkeypatch, path
+):
+    from landppt.auth.request_context import current_base_url, current_user_id
+
+    middleware = AuthMiddleware()
+
+    async def cached_user(session_id):
+        return _FakeUser(user_id=7)
+
+    monkeypatch.setattr(middleware, "_get_user_from_session_cache", cached_user)
+    error = RuntimeError("template_kind column is missing")
+    seen_user_ids = []
+
+    async def failing_route(request):
+        seen_user_ids.append(current_user_id.get())
+        raise error
+
+    previous_user_id = current_user_id.get()
+    previous_base_url = current_base_url.get()
+    request = _build_request(path, "session_id=valid-session")
+    with pytest.raises(RuntimeError) as raised:
+        await middleware(request, failing_route)
+    assert raised.value is error
+    assert seen_user_ids == [7]
+    assert current_user_id.get() == previous_user_id
+    assert current_base_url.get() == previous_base_url
+
+
+@pytest.mark.asyncio
+async def test_auth_resolution_failure_keeps_auth_error_response(monkeypatch):
+    middleware = AuthMiddleware()
+    monkeypatch.setattr(
+        middleware, "_get_user_from_session_cache", _fake_cached_session_none
+    )
+
+    def unavailable_database():
+        raise RuntimeError("auth database is unavailable")
+
+    monkeypatch.setattr(auth_middleware_module, "get_db", unavailable_database)
+    response = await middleware(
+        _build_request(
+            "/api/global-master-templates/packages", "session_id=valid-session"
+        ),
+        _fake_call_next,
+    )
+    assert response.status_code == 500
+    assert b"Authentication error" in response.body

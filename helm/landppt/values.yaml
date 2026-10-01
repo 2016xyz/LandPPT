@@ -4,6 +4,7 @@ replicaCount: 1
 
 web:
   replicaCount: 1
+  annotations: {}
   # Empty type selects Recreate with persistence and RollingUpdate otherwise.
   # Set type to RollingUpdate only when the mounted storage supports concurrent Pods.
   updateStrategy:
@@ -23,6 +24,7 @@ web:
 
 worker:
   enabled: true
+  annotations: {}
   replicaCount: 1
   queue: default
   resources:

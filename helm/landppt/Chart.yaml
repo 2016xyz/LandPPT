@@ -2,7 +2,7 @@ apiVersion: v2
 name: landppt
 description: AI-powered PPT generation platform
 type: application
-version: 0.1.2
+version: 0.1.3
 appVersion: "0.3.3"
 keywords:
   - landppt

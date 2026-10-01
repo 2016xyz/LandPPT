@@ -185,6 +185,60 @@ def consumer_specs(documents):
     ]
 
 
+def test_argocd_runs_migrations_before_web_and_worker_rollout(helm):
+    documents = render(helm, "-f", "helm/landppt/values-argocd.yaml")
+    job = named(documents, "Job", "landppt-migrate")
+    annotations = job["metadata"]["annotations"]
+    assert annotations["argocd.argoproj.io/hook"] == "Sync"
+    assert set(annotations["argocd.argoproj.io/hook-delete-policy"].split(",")) == {
+        "BeforeHookCreation",
+        "HookSucceeded",
+    }
+    assert "helm.sh/hook" not in annotations
+    migration_wave = int(annotations["argocd.argoproj.io/sync-wave"])
+    for kind, name in (
+        ("ConfigMap", "landppt"),
+        ("Secret", "landppt"),
+        ("StatefulSet", "landppt-postgresql"),
+    ):
+        metadata = named(documents, kind, name)["metadata"]
+        assert (
+            int(metadata.get("annotations", {}).get("argocd.argoproj.io/sync-wave", 0))
+            < migration_wave
+        )
+    for name in ("landppt", "landppt-worker"):
+        deployment = named(documents, "Deployment", name)
+        assert (
+            int(deployment["metadata"]["annotations"]["argocd.argoproj.io/sync-wave"])
+            > migration_wave
+        )
+        assert (
+            job["spec"]["template"]["spec"]["containers"][0]["image"]
+            == deployment["spec"]["template"]["spec"]["containers"][0]["image"]
+        )
+    assert job["spec"]["template"]["spec"]["containers"][0]["command"] == [
+        "python",
+        "-m",
+        "landppt.cli",
+        "migrate-and-bootstrap",
+    ]
+    config = named(documents, "ConfigMap", "landppt")
+    assert config["data"]["LANDPPT_AUTO_MIGRATE_ON_STARTUP"] == "false"
+
+
+def test_default_chart_keeps_explicit_migration_policy(helm):
+    documents = render(helm)
+    assert not any(
+        item["kind"] == "Job" and item["metadata"]["name"] == "landppt-migrate"
+        for item in documents
+    )
+    for name in ("landppt", "landppt-worker"):
+        annotations = named(documents, "Deployment", name)["metadata"].get(
+            "annotations", {}
+        )
+        assert "argocd.argoproj.io/sync-wave" not in annotations
+
+
 @pytest.mark.parametrize(
     "overlay", [None, "values-production.yaml", "values-argocd.yaml"]
 )

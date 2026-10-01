@@ -65,6 +65,8 @@ app:
     DB_POOL_RECYCLE: "1800"
 
 web:
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
   # The current single-node local-path volumes can be mounted by multiple Pods
   # on that same node. Keep the legacy PVCs until their data is migrated to S3,
   # while allowing a second Web Pod to become ready before an old Pod is removed.
@@ -90,6 +92,8 @@ resources:
     memory: 4Gi
 
 worker:
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
   enabled: true
   queue: default
   replicaCount: 1
@@ -111,11 +115,15 @@ worker:
     minAvailable: 1
 
 migration:
-  # Keep disabled in Helm sync to avoid immutable Job upgrade failures.
-  # Run migrations explicitly from CI/CD when needed.
-  enabled: false
+  # Dependencies are ready in wave 0; migrate before Web/Worker in wave 2.
+  # Recreate the named hook on each sync instead of patching an immutable Job.
+  enabled: true
   hook: false
   backoffLimit: 3
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+    argocd.argoproj.io/sync-wave: "1"
 
 storage:
   backend: s3

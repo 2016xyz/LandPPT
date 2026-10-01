@@ -3,7 +3,7 @@ Pydantic models for API requests and responses
 """
 
 from typing import List, Optional, Dict, Any, Union, Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 import time
 import uuid
 
@@ -267,6 +267,16 @@ class GlobalMasterTemplateResponse(BaseModel):
     created_by: str
     created_at: float
     updated_at: float
+
+    @field_validator("description", "created_by", mode="before")
+    @classmethod
+    def normalize_nullable_text(cls, value):
+        return "" if value is None else value
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def normalize_nullable_tags(cls, value):
+        return [] if value is None else value
 
 
 class GlobalMasterTemplateDetailResponse(GlobalMasterTemplateResponse):

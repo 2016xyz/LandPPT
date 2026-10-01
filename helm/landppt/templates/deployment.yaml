@@ -4,6 +4,10 @@ metadata:
   name: {{ include "landppt.fullname" . }}
   labels:
     {{- include "landppt.labels" . | nindent 4 }}
+  {{- with .Values.web.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   {{- if not .Values.web.autoscaling.enabled }}
   replicas: {{ default .Values.replicaCount .Values.web.replicaCount }}
