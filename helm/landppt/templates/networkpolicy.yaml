@@ -9,6 +9,11 @@ spec:
   podSelector:
     matchLabels:
       {{- include "landppt.selectorLabels" . | nindent 6 }}
+    # NetworkPolicy allows are additive; never let this policy open renderer egress.
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: NotIn
+        values: [pptx-renderer]
   policyTypes:
     - Ingress
     - Egress

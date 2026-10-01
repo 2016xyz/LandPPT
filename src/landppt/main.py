@@ -12,6 +12,7 @@ import logging
 import os
 import sys
 import time
+from . import __version__
 from .api.openai_compat import router as openai_router
 from .api.landppt_api import router as landppt_router
 from .api.database_api import router as database_router
@@ -45,7 +46,7 @@ logging.getLogger('sqlalchemy.dialects').setLevel(logging.WARNING)
 app = FastAPI(
     title="LandPPT API",
     description="AI-powered PPT generation platform with OpenAI-compatible API",
-    version="0.1.0",
+    version=__version__,
     docs_url="/docs" if app_config.enable_api_docs else None,
     redoc_url="/redoc" if app_config.enable_api_docs else None,
     openapi_url="/openapi.json" if app_config.enable_api_docs else None,

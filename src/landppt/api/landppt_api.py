@@ -5,6 +5,7 @@ LandPPT specific API endpoints
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Request, Depends
 from typing import List, Optional
 
+from .. import __version__
 from ..auth.middleware import get_current_user_required
 from ..database.models import User
 import uuid
@@ -166,7 +167,7 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "LandPPT API",
-        "version": "0.1.0",
+        "version": __version__,
         "ai_provider": ai_config.default_ai_provider,
         "available_providers": ai_config.get_available_providers()
     }

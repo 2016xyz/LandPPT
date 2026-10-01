@@ -139,8 +139,7 @@ services:
     restart: "no"
 
   pptx-renderer:
-    build: ./scripts/pptx-renderer
-    image: ${LANDPPT_PPTX_RENDERER_IMAGE:-landppt-pptx-renderer:latest}
+    image: ${LANDPPT_PPTX_RENDERER_IMAGE:-ghcr.io/sligter/landppt-pptx-renderer:latest}
     user: "10001:10001"
     depends_on:
       pptx-render-init:

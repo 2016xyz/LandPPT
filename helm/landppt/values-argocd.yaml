@@ -2,8 +2,8 @@
 #
 # Deployment behavior:
 # - Changes under helm/landppt/** are applied by Argo CD directly.
-# - Changes under src/**, Dockerfile, pyproject.toml, uv.lock trigger GitHub Actions,
-#   which builds a new image and commits the new image tag back to this file.
+# - Application and scripts/pptx-renderer/** changes trigger GitHub Actions,
+#   which publishes both images before committing matching tags to this file.
 # - Argo CD then detects this file change and syncs the new image to Kubernetes.
 
 fullnameOverride: landppt
@@ -14,6 +14,19 @@ image:
   repository: ghcr.io/sligter/landppt
   tag: git-cb058fa8d331f464571cb2ada88446b34f284c15
   pullPolicy: IfNotPresent
+
+pptxRenderer:
+  enabled: true
+  image:
+    repository: ghcr.io/sligter/landppt-pptx-renderer
+    # Bootstrap until CI publishes the first renderer and pins both git tags.
+    tag: latest
+    pullPolicy: IfNotPresent
+  spool:
+    # This cluster uses single-node local-path storage.
+    accessModes:
+      - ReadWriteOnce
+    size: 2Gi
 
 # If the GHCR package is private, create an imagePullSecret in namespace landppt
 # and uncomment/configure this section.

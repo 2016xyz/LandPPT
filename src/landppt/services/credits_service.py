@@ -21,6 +21,7 @@ class CreditsService:
         "outline_generation": 3,      # 大纲生成（按LLM调用次数）3积分/次
         "slide_generation": 5,        # 幻灯片每页 5积分
         "template_generation": 10,    # 模板生成 10积分
+        "template_package_ai_call": 3,  # 模板包创建每次 AI 调用 3积分
         "ai_edit": 3,                 # AI编辑每次 3积分
         "ai_other": 1,                # 其他AI操作每次 1积分
     }
@@ -204,6 +205,7 @@ class CreditsService:
             "outline_generation": "大纲生成",
             "slide_generation": f"幻灯片生成 ({quantity}页)",
             "template_generation": "模板生成",
+            "template_package_ai_call": f"模板包创建 AI 调用 ({quantity}次)",
             "ai_edit": "AI编辑",
             "ai_other": "AI操作"
         }

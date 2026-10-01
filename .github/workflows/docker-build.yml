@@ -17,6 +17,8 @@ on:
       - 'docker-healthcheck.sh'
       - 'run.py'
       - 'src/**'
+      - 'scripts/pptx-renderer/**'
+      - 'scripts/update_argocd_images.py'
       - 'template_examples/**'
       - '.env.example'
       - 'pyproject.toml'
@@ -39,18 +41,37 @@ on:
         type: boolean
 
 env:
-  # Docker 镜像名称 - 请根据实际情况修改
-  IMAGE_NAME: landppt
   # 构建平台
   PLATFORMS: linux/amd64
+  DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+
+concurrency:
+  group: docker-build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  validate:
+    uses: ./.github/workflows/deploy-validate.yml
+    permissions:
+      contents: read
+
   build:
-    name: Build Docker Image
+    name: Build ${{ matrix.image }}
     runs-on: ubuntu-latest
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: landppt
+            context: .
+            dockerfile: ./Dockerfile
+          - image: landppt-pptx-renderer
+            context: ./scripts/pptx-renderer
+            dockerfile: ./scripts/pptx-renderer/Dockerfile
     
     permissions:
-      contents: write
+      contents: read
       packages: write
     
     steps:
@@ -74,7 +95,7 @@ jobs:
       
       # 登录到 GitHub Container Registry (ghcr.io)
       - name: Login to GitHub Container Registry
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && github.event.inputs.push_image != 'false'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -84,12 +105,21 @@ jobs:
       # 登录到 Docker Hub（可选 - 如果需要推送到 Docker Hub）
       # 需要在 Repository Settings > Secrets 中设置 DOCKERHUB_USERNAME 和 DOCKERHUB_TOKEN
       - name: Login to Docker Hub
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && github.event.inputs.push_image != 'false' && env.DOCKERHUB_USERNAME != ''
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-        continue-on-error: true
+
+      - name: Image repositories
+        id: repositories
+        env:
+          IMAGE: ${{ matrix.image }}
+        run: |
+          echo "ghcr=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${IMAGE}" >> "$GITHUB_OUTPUT"
+          if [[ -n "$DOCKERHUB_USERNAME" ]]; then
+            echo "dockerhub=${DOCKERHUB_USERNAME}/${IMAGE}" >> "$GITHUB_OUTPUT"
+          fi
       
       # 提取 Docker 元数据（标签、标签等）
       - name: Extract Docker Metadata
@@ -97,8 +127,8 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: |
-            ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
-            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}
+            ${{ steps.repositories.outputs.ghcr }}
+            ${{ steps.repositories.outputs.dockerhub }}
           tags: |
             # 最新标签（仅在 main/master 分支）
             type=raw,value=latest,enable={{is_default_branch}}
@@ -120,66 +150,21 @@ jobs:
       - name: Build and Push Docker Image
         uses: docker/build-push-action@v5
         with:
-          context: .
-          file: ./Dockerfile
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
           platforms: ${{ env.PLATFORMS }}
           # PR 时不推送，仅构建验证
           push: ${{ github.event_name != 'pull_request' && (github.event.inputs.push_image != 'false') }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           # 利用 GitHub Actions 缓存加速构建
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
           # 构建参数（如需要可添加）
           build-args: |
             BUILDTIME=${{ github.event.repository.updated_at }}
             VERSION=${{ github.sha }}
       
-      # 源码变更后，把新镜像 tag 写回 Argo CD values 文件。
-      # Argo CD 监听 helm/landppt/values-argocd.yaml，检测到该提交后会自动同步部署。
-      - name: Update Argo CD image tag
-        if: github.event_name != 'pull_request' && (github.event.inputs.push_image != 'false')
-        env:
-          IMAGE_REPOSITORY: ghcr.io/${{ github.repository_owner }}/landppt
-          IMAGE_TAG: git-${{ github.sha }}
-          VALUES_FILE: helm/landppt/values-argocd.yaml
-        run: |
-          python - <<'PY'
-          import os
-          from pathlib import Path
-
-          path = Path(os.environ["VALUES_FILE"])
-          repository = os.environ["IMAGE_REPOSITORY"]
-          tag = os.environ["IMAGE_TAG"]
-
-          lines = path.read_text().splitlines()
-          in_image = False
-          for index, line in enumerate(lines):
-              if line == "image:":
-                  in_image = True
-                  continue
-              if in_image and line and not line.startswith(" "):
-                  in_image = False
-              if in_image and line.startswith("  repository:"):
-                  lines[index] = f"  repository: {repository}"
-              elif in_image and line.startswith("  tag:"):
-                  lines[index] = f"  tag: {tag}"
-              elif in_image and line.startswith("  pullPolicy:"):
-                  lines[index] = "  pullPolicy: IfNotPresent"
-
-          path.write_text("\n".join(lines) + "\n")
-          PY
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "$VALUES_FILE"
-          if git diff --cached --quiet; then
-            echo "No image tag change to commit."
-          else
-            git commit -m "chore(deploy): update image to ${IMAGE_TAG} [skip ci]"
-            git push origin HEAD:${GITHUB_REF_NAME}
-          fi
-
       # 输出镜像摘要
       - name: Image Digest
         run: |
@@ -191,6 +176,37 @@ jobs:
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Argo CD image tag:** \`git-${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+
+  update-deployment:
+    name: Update both Argo CD images
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name != 'pull_request' && github.event.inputs.push_image != 'false' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - name: Update image tags after both images are published
+        env:
+          IMAGE_TAG: git-${{ github.sha }}
+          VALUES_FILE: helm/landppt/values-argocd.yaml
+        run: |
+          repository_owner="${GITHUB_REPOSITORY_OWNER,,}"
+          python scripts/update_argocd_images.py "$VALUES_FILE" \
+            --repository "ghcr.io/${repository_owner}/landppt" \
+            --renderer-repository "ghcr.io/${repository_owner}/landppt-pptx-renderer" \
+            --tag "$IMAGE_TAG"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$VALUES_FILE"
+          if git diff --cached --quiet; then
+            echo "No image tag change to commit."
+          else
+            git commit -m "chore(deploy): update app and renderer to ${IMAGE_TAG} [skip ci]"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
 
   # 安全扫描（可选但推荐）
   security-scan:

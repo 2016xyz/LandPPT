@@ -54,12 +54,37 @@ observability:
 
 image:
   repository: bradleylzh/landppt
-  tag: "0.3.1"
+  tag: "0.5.3"
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
+
+pptxRenderer:
+  enabled: true
+  image:
+    repository: ghcr.io/sligter/landppt-pptx-renderer
+    # Empty follows image.tag so release images use the same version.
+    tag: ""
+    pullPolicy: IfNotPresent
+  spool:
+    existingClaim: ""
+    storageClass: ""
+    size: 2Gi
+    # RWO colocates Web/Worker with the renderer on one node.
+    # Multi-node deployments need an RWX-capable class and ReadWriteMany.
+    accessModes:
+      - ReadWriteOnce
+    mountPath: /app/pptx-render-spool
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  tmpSize: 512Mi
 
 app:
   workers: 2

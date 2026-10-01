@@ -12,13 +12,29 @@ on:
       - 'v*.*.*'  # 匹配 v1.0.0, v2.1.3 等版本标签
 
 env:
-  IMAGE_NAME: landppt
   PLATFORMS: linux/amd64,linux/arm64
+  DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
 
 jobs:
+  validate:
+    uses: ./.github/workflows/deploy-validate.yml
+    permissions:
+      contents: read
+
   release:
-    name: Build and Release
+    name: Release ${{ matrix.image }}
     runs-on: ubuntu-latest
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: landppt
+            context: .
+            dockerfile: ./Dockerfile
+          - image: landppt-pptx-renderer
+            context: ./scripts/pptx-renderer
+            dockerfile: ./scripts/pptx-renderer/Dockerfile
     
     permissions:
       contents: read
@@ -55,22 +71,29 @@ jobs:
       
       # 登录到 Docker Hub（如果配置了）
       - name: Login to Docker Hub
+        if: env.DOCKERHUB_USERNAME != ''
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-        continue-on-error: true
+
+      - name: Image repositories
+        id: repositories
+        env:
+          IMAGE: ${{ matrix.image }}
+        run: |
+          echo "ghcr=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${IMAGE}" >> "$GITHUB_OUTPUT"
+          if [[ -n "$DOCKERHUB_USERNAME" ]]; then
+            echo "dockerhub=${DOCKERHUB_USERNAME}/${IMAGE}" >> "$GITHUB_OUTPUT"
+          fi
       
       # 提取版本信息
       - name: Extract Version
         id: version
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name || github.ref_name }}
         run: |
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            VERSION=${GITHUB_REF#refs/tags/}
-            VERSION=${VERSION#v}  # 移除 v 前缀
-          else
-            VERSION="latest"
-          fi
+          VERSION=${RELEASE_TAG#v}
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Version: $VERSION"
       
@@ -80,8 +103,8 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: |
-            ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
-            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}
+            ${{ steps.repositories.outputs.ghcr }}
+            ${{ steps.repositories.outputs.dockerhub }}
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -92,14 +115,14 @@ jobs:
       - name: Build and Push Multi-Platform Image
         uses: docker/build-push-action@v5
         with:
-          context: .
-          file: ./Dockerfile
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
           platforms: ${{ env.PLATFORMS }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
           build-args: |
             VERSION=${{ steps.version.outputs.version }}
       
@@ -112,10 +135,10 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
           echo "# 拉取最新版本" >> $GITHUB_STEP_SUMMARY
-          echo "docker pull ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ steps.repositories.outputs.ghcr }}:latest" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "# 拉取指定版本" >> $GITHUB_STEP_SUMMARY
-          echo "docker pull ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ steps.repositories.outputs.ghcr }}:${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Supported Platforms:** \`${{ env.PLATFORMS }}\`" >> $GITHUB_STEP_SUMMARY

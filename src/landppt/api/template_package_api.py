@@ -827,34 +827,35 @@ async def ai_edit_content(
 async def create_package_with_ai(
     payload: GeneratePackage, user=Depends(get_current_user_required)
 ):
+    from ..services.template_package.creation_billing import (
+        OPERATION,
+        PackageCreationCreditError,
+        PackageCreationService,
+    )
     from ..services.template_package.generator import generate_package
     from ..web.route_modules.support import (
         check_credits_for_operation,
-        consume_credits_for_operation,
         get_ppt_service_for_user,
     )
 
     service = get_ppt_service_for_user(user.id)
     _, settings = await service.get_role_provider_async("template_generation")
     ok, required, balance = await check_credits_for_operation(
-        user.id, "template_generation", 1, provider_name=settings.get("provider")
+        user.id, OPERATION, 1, provider_name=settings.get("provider")
     )
     if not ok:
         raise HTTPException(402, "积分不足")
+    service = PackageCreationService(service, user.id, "AI 模板包创建")
 
     async def stream():
         try:
             async for item in generate_package(service, payload.prompt):
-                if item["type"] == "complete":
-                    await consume_credits_for_operation(
-                        user.id,
-                        "template_generation",
-                        1,
-                        description="AI 模板包创建",
-                        reference_id=f"package-version:{item['package']['id']}",
-                        provider_name=settings.get("provider"),
-                    )
                 yield "data: " + json.dumps(item, ensure_ascii=False) + "\n\n"
+        except PackageCreationCreditError as exc:
+            yield "data: " + json.dumps(
+                {"type": "error", "message": str(exc), "status_code": exc.status_code},
+                ensure_ascii=False,
+            ) + "\n\n"
         except Exception as exc:
             yield "data: " + json.dumps(
                 {"type": "error", "message": str(exc)}, ensure_ascii=False

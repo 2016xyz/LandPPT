@@ -46,6 +46,29 @@ app.kubernetes.io/name: {{ include "landppt.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
+{{/* Shared job volume, separate from persisted application artifacts. */}}
+{{- define "landppt.pptxSpoolClaim" -}}
+{{- .Values.pptxRenderer.spool.existingClaim | default (printf "%s-pptx-spool" (include "landppt.fullname" .)) -}}
+{{- end -}}
+
+{{/* RWO supports multiple Pods only on the same node as the renderer. */}}
+{{- define "landppt.applicationAffinity" -}}
+{{- $affinity := deepCopy .Values.affinity -}}
+{{- if and .Values.pptxRenderer.enabled (has "ReadWriteOnce" .Values.pptxRenderer.spool.accessModes) -}}
+{{- $labels := include "landppt.selectorLabels" . | fromYaml -}}
+{{- $_ := set $labels "app.kubernetes.io/component" "pptx-renderer" -}}
+{{- $term := dict "labelSelector" (dict "matchLabels" $labels) "topologyKey" "kubernetes.io/hostname" -}}
+{{- $podAffinity := get $affinity "podAffinity" | default dict -}}
+{{- $terms := get $podAffinity "requiredDuringSchedulingIgnoredDuringExecution" | default list -}}
+{{- $_ := set $podAffinity "requiredDuringSchedulingIgnoredDuringExecution" (append $terms $term) -}}
+{{- $_ := set $affinity "podAffinity" $podAffinity -}}
+{{- end -}}
+{{- with $affinity }}
+affinity:
+  {{- toYaml . | nindent 2 }}
+{{- end -}}
+{{- end -}}
+
 {{/*
 Secret containing the internal PostgreSQL password.
 */}}

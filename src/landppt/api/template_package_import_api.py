@@ -12,6 +12,10 @@ from ..auth.middleware import get_current_user_required
 from ..services.slide.package_generation.content_service import llm_timeout
 from ..services.template_package.archive import MAX_ARCHIVE_BYTES, import_archive
 from ..services.template_package.catalog import PackageCatalog
+from ..services.template_package.creation_billing import (
+    PackageCreationCreditError,
+    PackageCreationService,
+)
 from ..services.template_package.pptx_analysis import classify_analysis
 from ..services.template_package.pptx_import import (
     MAX_UPLOAD,
@@ -130,6 +134,8 @@ async def import_with_ai_repair(data, settings, service, progress):
             raise ValueError(
                 f"AI 请求超过 {model_timeout:g} 秒，未保存未通过校验的版式"
             ) from exc
+        except PackageCreationCreditError:
+            raise
         except Exception as exc:
             raise ValueError(f"AI 修复未完成：{exc}") from exc
         finally:
@@ -182,13 +188,20 @@ async def analyze(
             partial(analyze_pptx, progress=progress, vision=vision), data
         )
         return await classify_analysis(
-            result, analysis_service(user.id), progress, vision=vision
+            result,
+            PackageCreationService(
+                analysis_service(user.id), user.id, "PPTX 模板包识别"
+            ),
+            progress,
+            vision=vision,
         )
 
     if stream:
         return stream_operation(operation)
     try:
         return await operation(lambda *_: None)
+    except PackageCreationCreditError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
 
@@ -209,7 +222,12 @@ async def create_from_pptx(
     async def operation(progress):
         progress("queued", "文件上传完成，正在等待渲染资源")
         package, report = await import_with_ai_repair(
-            data, settings, analysis_service(user.id), progress
+            data,
+            settings,
+            PackageCreationService(
+                analysis_service(user.id), user.id, "PPTX 模板包创建"
+            ),
+            progress,
         )
         progress("save", "校验完成，正在保存模板包草稿")
         saved = await PackageCatalog(user.id).create(package)
@@ -219,6 +237,8 @@ async def create_from_pptx(
         return stream_operation(operation)
     try:
         return await operation(lambda *_: None)
+    except PackageCreationCreditError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
 

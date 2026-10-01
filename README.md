@@ -260,6 +260,7 @@ docker compose logs -f landppt
 - MinIO 控制台：`http://localhost:9001`  
 - 生产默认关闭管理员自动初始化；首次部署请设置 `LANDPPT_BOOTSTRAP_ADMIN_ENABLED=true` 及对应账号密码  
 - 镜像默认 `bradleylzh/landppt:latest`，可用 `LANDPPT_IMAGE` 覆盖  
+- PPTX 渲染镜像可用 `LANDPPT_PPTX_RENDERER_IMAGE` 覆盖；匹配版本与 Helm/Argo CD 配置见 [部署说明](deploy/README.md)。
 
 ### 方式五：开发热重载
 

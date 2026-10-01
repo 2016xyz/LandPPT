@@ -1,0 +1,133 @@
+{{- if .Values.pptxRenderer.enabled }}
+{{- if has "ReadWriteOncePod" .Values.pptxRenderer.spool.accessModes }}
+{{- fail "pptxRenderer.spool.accessModes must allow the renderer and application Pods to share the volume; ReadWriteOncePod is unsupported" }}
+{{- end }}
+{{- if not .Values.pptxRenderer.spool.existingClaim }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "landppt.pptxSpoolClaim" . }}
+  labels:
+    {{- include "landppt.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    {{- toYaml .Values.pptxRenderer.spool.accessModes | nindent 4 }}
+  {{- with .Values.pptxRenderer.spool.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.pptxRenderer.spool.size }}
+---
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "landppt.fullname" . }}-pptx-renderer
+  labels:
+    {{- include "landppt.labels" . | nindent 4 }}
+    app.kubernetes.io/component: pptx-renderer
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "landppt.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: pptx-renderer
+  template:
+    metadata:
+      labels:
+        {{- include "landppt.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: pptx-renderer
+    spec:
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        - name: spool-permissions
+          image: {{ .Values.volumePermissions.image | quote }}
+          imagePullPolicy: {{ .Values.volumePermissions.imagePullPolicy }}
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+            runAsNonRoot: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+              add: [CHOWN, FOWNER]
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              chown {{ .Values.securityContext.runAsUser | default 10001 }}:{{ .Values.securityContext.runAsGroup | default 10001 }} /spool
+              chmod 0700 /spool
+          resources:
+            {{- toYaml .Values.volumePermissions.resources | nindent 12 }}
+          volumeMounts:
+            - name: pptx-render-spool
+              mountPath: /spool
+      containers:
+        - name: pptx-renderer
+          image: "{{ .Values.pptxRenderer.image.repository }}:{{ .Values.pptxRenderer.image.tag | default (.Values.image.tag | default .Chart.AppVersion) }}"
+          imagePullPolicy: {{ .Values.pptxRenderer.image.pullPolicy }}
+          securityContext:
+            {{- $security := deepCopy .Values.securityContext }}
+            {{- $_ := set $security "readOnlyRootFilesystem" true }}
+            {{- toYaml $security | nindent 12 }}
+          readinessProbe:
+            exec:
+              command: [python, -c, "import os; assert os.access('/spool', os.W_OK)"]
+            initialDelaySeconds: 2
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.pptxRenderer.resources | nindent 12 }}
+          volumeMounts:
+            - name: pptx-render-spool
+              mountPath: /spool
+            - name: renderer-tmp
+              mountPath: /tmp
+      volumes:
+        - name: pptx-render-spool
+          persistentVolumeClaim:
+            claimName: {{ include "landppt.pptxSpoolClaim" . }}
+        - name: renderer-tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: {{ .Values.pptxRenderer.tmpSize }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+# Always isolate the file renderer, even when the application policy is disabled.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "landppt.fullname" . }}-pptx-renderer
+  labels:
+    {{- include "landppt.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "landppt.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: pptx-renderer
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress: []
+{{- end }}

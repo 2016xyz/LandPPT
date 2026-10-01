@@ -8,6 +8,7 @@ from typing import Literal
 from pydantic import Field, field_validator
 
 from ..slide.package_generation.content_service import ContentService, llm_timeout
+from .creation_billing import PackageCreationCreditError
 from .schemas import ContractModel, PageComponent
 
 
@@ -306,6 +307,8 @@ async def classify_analysis(analysis, service, progress, *, vision=False):
                 if vision:
                     slide["analysis_method"] = "vision"
                 break
+            except PackageCreationCreditError:
+                raise
             except Exception as exc:  # noqa: BLE001 - model/network faults retry
                 problem = str(exc)
                 invalid = isinstance(exc, (ValueError, TypeError, KeyError))

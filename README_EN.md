@@ -256,6 +256,7 @@ docker compose logs -f landppt
 - MinIO console: `http://localhost:9001`  
 - Production disables admin auto-bootstrap by default; set `LANDPPT_BOOTSTRAP_ADMIN_ENABLED=true` and admin credentials for first deploy  
 - Default image `bradleylzh/landppt:latest`; override with `LANDPPT_IMAGE`  
+- Override the PPTX renderer with `LANDPPT_PPTX_RENDERER_IMAGE`; see the [deployment guide](deploy/README.md) for matching image tags and Helm/Argo CD settings.
 
 ### Option 5: Development (hot reload)
 

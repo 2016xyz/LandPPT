@@ -110,6 +110,10 @@ spec:
             {{- end }}
           env:
             {{- include "landppt.databaseEnv" . | nindent 12 }}
+            {{- if .Values.pptxRenderer.enabled }}
+            - name: LANDPPT_PPTX_RENDER_SPOOL
+              value: {{ .Values.pptxRenderer.spool.mountPath | quote }}
+            {{- end }}
           {{- with .Values.worker.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
@@ -117,7 +121,16 @@ spec:
           volumeMounts:
             - name: dshm
               mountPath: /dev/shm
+            {{- if .Values.pptxRenderer.enabled }}
+            - name: pptx-render-spool
+              mountPath: {{ .Values.pptxRenderer.spool.mountPath | quote }}
+            {{- end }}
       volumes:
+        {{- if .Values.pptxRenderer.enabled }}
+        - name: pptx-render-spool
+          persistentVolumeClaim:
+            claimName: {{ include "landppt.pptxSpoolClaim" . }}
+        {{- end }}
         - name: dshm
           emptyDir:
             medium: Memory
@@ -126,10 +139,7 @@ spec:
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.affinity }}
-      affinity:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+      {{- include "landppt.applicationAffinity" . | nindent 6 }}
       {{- with .Values.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}

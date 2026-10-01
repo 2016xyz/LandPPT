@@ -1,0 +1,56 @@
+name: Validate deployment configuration
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - '.github/workflows/**'
+      - 'helm/landppt/**'
+      - 'deploy/**'
+      - 'docker-compose*'
+      - 'scripts/pptx-renderer/**'
+      - 'scripts/update_argocd_images.py'
+      - 'tests/test_pptx_renderer_deployment.py'
+      - 'tests/test_container_security.py'
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - 'helm/landppt/**'
+      - 'deploy/**'
+      - 'docker-compose*'
+      - 'scripts/pptx-renderer/**'
+      - 'scripts/update_argocd_images.py'
+      - 'tests/test_pptx_renderer_deployment.py'
+      - 'tests/test_container_security.py'
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.19.0
+      - name: Install configuration test dependencies
+        run: python -m pip install pytest pyyaml
+      - name: Validate chart
+        run: |
+          helm lint helm/landppt \
+            --set app.existingSecret=validation-app \
+            --set postgresql.auth.existingSecret=validation-postgresql \
+            --set minio.auth.existingSecret=validation-minio \
+            --set storage.s3.existingSecret=validation-minio
+      - name: Test image publication and rendered deployment contracts
+        run: python -m pytest tests/test_pptx_renderer_deployment.py tests/test_container_security.py -q
+      - name: Validate production and development Compose files
+        run: |
+          docker compose --env-file .env.example -f docker-compose.yml config --quiet
+          docker compose --env-file .env.example -f docker-compose-dev.yaml config --quiet
