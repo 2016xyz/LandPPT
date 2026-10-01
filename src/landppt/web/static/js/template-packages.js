@@ -79,14 +79,27 @@
             modal.addEventListener('close',()=>resolve(result),{once:true});
         });
     }
-    function promptDialog(title, label, value) {
+    function promptDialog(title, label, value, {multiline=false, maxLength=255, allowEmpty=false, onSave=async()=>{}} = {}) {
         return new Promise(resolve => {
             const modal=dialog(title); modal.classList.add('package-confirm');
-            const wrap=node('label',label); const input=node('input'); input.value=value || ''; input.maxLength=255; wrap.append(input);
+            const wrap=node('label',label); const input=node(multiline?'textarea':'input'); input.value=value || ''; input.maxLength=maxLength; input.required=!allowEmpty; wrap.append(input);
+            if(multiline) { input.rows=5; input.placeholder='介绍模板包的用途、风格和适用场景（可留空）'; }
+            const status=node('div','','package-status'); status.setAttribute('role','status'); status.setAttribute('aria-live','polite');
             let result=null;
-            const form=node('form'); form.addEventListener('submit',e=>{e.preventDefault(); if(input.value.trim()){result=input.value.trim();modal.close();}});
+            let saving=false;
+            const form=node('form'); form.addEventListener('submit',async e=>{
+                e.preventDefault(); if(saving) return;
+                const next=input.value.trim();
+                if(!allowEmpty && !next) { input.setCustomValidity('请填写'+label); input.reportValidity(); return; }
+                saving=true; input.disabled=true; modal.querySelectorAll('button').forEach(b=>b.disabled=true);
+                try { await onSave(next); result=next; modal.close(); }
+                catch(error) { status.textContent=error.message; status.classList.add('error'); }
+                finally { saving=false; input.disabled=false; modal.querySelectorAll('button').forEach(b=>b.disabled=false); }
+            });
+            input.addEventListener('input',()=>input.setCustomValidity(''));
+            modal.addEventListener('cancel',e=>{if(saving)e.preventDefault();});
             const footer=node('footer'); const save=node('button','保存','primary'); save.type='submit';
-            footer.append(button('取消',()=>modal.close()),save); form.append(wrap,footer); modal.append(form);
+            footer.append(button('取消',()=>modal.close()),save); form.append(wrap,status,footer); modal.append(form);
             modal.addEventListener('close',()=>resolve(result),{once:true});
             input.focus(); input.select();
         });
@@ -105,6 +118,14 @@
         if(!name || name===pkg.template_name) return;
         await request(`/api/global-master-templates/package-templates/${pkg.template_id}`,'PATCH',{name});
         await load(); message('已重命名。已发布版本的内容不变。');
+    }
+    async function editDescription(pkg) {
+        const current=pkg.description ?? pkg.manifest.description;
+        const value=await promptDialog('编辑模板包描述','描述',current,{
+            multiline:true,maxLength:2000,allowEmpty:true,
+            onSave:description=>description===current ? Promise.resolve() : request(`/api/global-master-templates/package-templates/${pkg.template_id}`,'PATCH',{description})
+        });
+        return value!==null && value!==current;
     }
     async function deletePackage(pkg) {
         const versions=packages.filter(p=>p.template_id===pkg.template_id).length;
@@ -177,7 +198,7 @@
             const meta=node('small',`v${pkg.version} · ${pkg.manifest.components.length} 个页面`);
             const badge=node('span',statuses[pkg.status],'package-badge is-'+pkg.status);
             const title=node('div',undefined,'package-card-title'); title.append(node('h3',pkg.template_name),badge);
-            body.append(title,meta,node('p',pkg.manifest.description));
+            body.append(title,meta,node('p',pkg.description ?? pkg.manifest.description,'package-description'));
             if(pkg.id===preferred){card.classList.add('is-preferred');body.append(node('p','需求确认时已选择，大纲已按此模板包的版式规划','package-preferred-note'));}
             const actions=node('div',undefined,'package-tools package-card-actions');
             if(panel.dataset.mode==='select' && pkg.status==='published') actions.append(button('使用此模板包快速生成', async()=>{
@@ -190,9 +211,9 @@
             const menu=node('details',undefined,'package-menu');
             const summary=node('summary','更多'); summary.setAttribute('aria-label','更多操作');
             const list=node('div',undefined,'package-menu-list');
-            if(pkg.user_id) list.append(button('重命名',()=>renamePackage(pkg)));
+            if(pkg.user_id) list.append(button('重命名',()=>renamePackage(pkg)),button('编辑描述',async()=>{if(await editDescription(pkg)){await load();message('描述已保存。');}}));
             list.append(button('导出 JSON',()=>download(pkg)));
-            list.append(button('复制为新模板包',async()=>{await request(api,'POST',{manifest:pkg.manifest});await load();message('已复制为新的模板包草稿。');}));
+            list.append(button('复制为新模板包',async()=>{await request(api,'POST',{manifest:{...pkg.manifest,name:pkg.template_name,description:pkg.description ?? pkg.manifest.description}});await load();message('已复制为新的模板包草稿。');}));
             if(pkg.user_id && pkg.status==='published') list.append(button('停用此版本',async()=>{await request(`${api}/${pkg.id}/retire`,'POST');await load();message('已停用。引用此版本的项目仍可继续使用。');}));
             if(pkg.editable) list.append(button('删除此草稿',()=>deleteVersion(pkg)));
             if(pkg.user_id){const del=button('删除模板包',()=>deletePackage(pkg)); del.classList.add('danger'); list.append(del);}
@@ -240,7 +261,7 @@
         },true);
         modal.append(instructions,progress,status,submit);
     }
-    window.PackageUI={request,node,button,dialog,fitPreview,readEditStream,confirmDialog,download,families,api};
+    window.PackageUI={request,node,button,dialog,fitPreview,readEditStream,confirmDialog,download,editDescription,families,api};
     document.addEventListener('click',e=>{document.querySelectorAll('.package-menu[open]').forEach(m=>{if(!m.contains(e.target))m.open=false;});});
     if(panel){
         document.getElementById('packageInstall').addEventListener('click',async function(){this.disabled=true;try{await request(api+'/builtin','POST');await load();message('内置模板包已添加。');}catch(e){message(e.message,true);}finally{this.disabled=false;}});

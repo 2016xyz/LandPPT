@@ -118,12 +118,15 @@ class ContentService:
     def __init__(self, service):
         self.service = service
 
-    async def json_completion(self, prompt, *, role="slide_generation", image_urls=()):
+    async def json_completion(
+        self, prompt, *, role="slide_generation", image_urls=(), on_chunk=None
+    ):
         user_content = prompt
         if image_urls:
             user_content = [TextContent(text=prompt)] + [
                 ImageContent(image_url={"url": url}) for url in image_urls
             ]
+        stream_options = {"on_chunk": on_chunk} if on_chunk is not None else {}
         response = await bounded_completion(
             self.service,
             self.service._chat_completion_for_role(
@@ -137,6 +140,7 @@ class ContentService:
                 ],
                 temperature=0.3,
                 stream_response=True,
+                **stream_options,
             ),
         )
         return parse_json(response.content), {

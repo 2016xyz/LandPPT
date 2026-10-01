@@ -1,4 +1,4 @@
-"""Draft workspace: in-place multi-round edits, page operations, rename, delete, export."""
+"""Draft workspace: multi-round edits, page operations, metadata, delete, export."""
 
 import asyncio
 import json
@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from landppt.api import template_package_api as api
-from landppt.database.models import Base, Project, User
+from landppt.database.models import Base, GlobalMasterTemplate, Project, User
 from landppt.services.slide.package_generation.options import PackageOptions
 from landppt.services.slide.package_generation.storage import PackageStorage
 from landppt.services.template_package import editor
@@ -233,6 +233,126 @@ async def test_rename_export_and_delete(db):
         await other.rename(published["template_id"], "x")
     with pytest.raises(PackageNotFound):
         await other.delete_template(published["template_id"])
+
+
+@pytest.mark.asyncio
+async def test_edit_description_updates_catalog_drafts_and_export(db):
+    catalog = PackageCatalog(1, db)
+    published = await catalog.install_builtin()
+    store = PackageStorage(1, db)
+    await store.select_package("p1", published["id"], PackageOptions(selector="rules"))
+    draft = await catalog.editable_draft(published["id"])
+    await catalog.transition(draft["id"], "validate")
+    description = "适合季度业务汇报\n包含数据对比与总结页面"
+    async with client_for(catalog) as client:
+        response = await client.patch(
+            f"/api/global-master-templates/package-templates/{published['template_id']}",
+            json={"description": f"  {description}  "},
+        )
+        assert response.status_code == 200
+        assert response.json()["description"] == description
+        assert response.json()["template_name"] == published["template_name"]
+        versions = (await client.get("/api/global-master-templates/packages")).json()[
+            "packages"
+        ]
+        assert all(p["description"] == description for p in versions)
+        updated = await catalog.get(draft["id"])
+        assert updated["manifest"]["description"] == description
+        assert updated["manifest"]["components"] == draft["manifest"]["components"]
+        assert updated["content_hash"] != draft["content_hash"]
+        assert updated["status"] == "draft" and updated["validation_report"] is None
+        unchanged = await catalog.get(published["id"])
+        assert unchanged["manifest"] == published["manifest"]
+        assert unchanged["content_hash"] == published["content_hash"]
+        assert unchanged["status"] == "published"
+        assert (await store.snapshot("p1"))["version_id"] == published["id"]
+        exported = await client.get(
+            f"/api/global-master-templates/packages/{published['id']}/export"
+        )
+        assert exported.json()["description"] == description
+        TemplatePackage.model_validate(exported.json())
+        new_draft = await catalog.editable_draft(published["id"])
+        assert new_draft["manifest"]["description"] == description
+
+
+@pytest.mark.asyncio
+async def test_description_can_be_cleared_and_survives_rename_and_undo(db):
+    catalog = PackageCatalog(1, db)
+    published = await catalog.install_builtin()
+    draft = await catalog.editable_draft(published["id"])
+    url = f"/api/global-master-templates/package-templates/{published['template_id']}"
+    async with client_for(catalog) as client:
+        response = await client.patch(url, json={"name": "我的模板", "description": ""})
+        assert response.status_code == 200
+        assert response.json()["description"] == ""
+        renamed = await client.patch(url, json={"name": "新名称"})
+        assert renamed.status_code == 200
+        assert renamed.json()["description"] == ""
+        current = await catalog.get(draft["id"])
+        restored = await client.put(
+            f"/api/global-master-templates/packages/{draft['id']}/manifest",
+            json={
+                "manifest": draft["manifest"],
+                "expected_hash": current["content_hash"],
+            },
+        )
+        assert restored.status_code == 200
+        assert restored.json()["manifest"]["name"] == "新名称"
+        assert restored.json()["manifest"]["description"] == ""
+        exported = await client.get(
+            f"/api/global-master-templates/packages/{published['id']}/export"
+        )
+        assert exported.json()["description"] == ""
+        assert (await catalog.get(published["id"]))["manifest"] == published["manifest"]
+
+
+@pytest.mark.asyncio
+async def test_description_edit_requires_package_ownership(db):
+    catalog = PackageCatalog(1, db)
+    published = await catalog.install_builtin()
+    url = f"/api/global-master-templates/package-templates/{published['template_id']}"
+    async with client_for(PackageCatalog(2, db)) as client:
+        assert (
+            await client.patch(url, json={"description": "覆盖"})
+        ).status_code == 404
+    assert await catalog.get(published["id"]) == published
+    async with db() as session, session.begin():
+        template = await session.get(GlobalMasterTemplate, published["template_id"])
+        template.user_id = None
+    async with client_for(catalog) as client:
+        assert (
+            await client.patch(url, json={"description": "覆盖"})
+        ).status_code == 404
+    assert (await catalog.get(published["id"]))["description"] == published[
+        "description"
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        {"description": None},
+        {"description": "x" * 2001},
+        {"name": None},
+        {"name": ""},
+        {"name": "   "},
+        {"name": "x" * 256},
+        {"description": "正常描述", "name": None},
+        {"description": "正常描述", "unknown": True},
+    ],
+)
+async def test_invalid_package_metadata_is_rejected_without_changes(db, payload):
+    catalog = PackageCatalog(1, db)
+    published = await catalog.install_builtin()
+    async with client_for(catalog) as client:
+        response = await client.patch(
+            f"/api/global-master-templates/package-templates/{published['template_id']}",
+            json=payload,
+        )
+        assert response.status_code == 422
+    assert await catalog.get(published["id"]) == published
 
 
 @pytest.mark.asyncio

@@ -47,6 +47,11 @@ class PackageCatalog:
             "id": version.id,
             "template_id": template.id,
             "template_name": template.template_name,
+            "description": (
+                template.description
+                if template.description is not None
+                else version.manifest.get("description", "")
+            ),
             "template_kind": "package",
             "version": version.version,
             "status": version.status,
@@ -137,6 +142,11 @@ class PackageCatalog:
                     **manifest.model_dump(),
                     "version": version_number,
                     "name": template.template_name,
+                    "description": (
+                        template.description
+                        if template.description is not None
+                        else manifest.description
+                    ),
                 }
             )
             row = TemplatePackageVersion(
@@ -260,6 +270,11 @@ class PackageCatalog:
                     **manifest.model_dump(),
                     "version": row.version,
                     "name": template.template_name,
+                    "description": (
+                        template.description
+                        if template.description is not None
+                        else manifest.description
+                    ),
                 }
             )
             row.manifest = manifest.model_dump(mode="json")
@@ -294,29 +309,51 @@ class PackageCatalog:
         )
 
     async def rename(self, template_id: int, name: str):
-        name = name.strip()[:255]
-        if not name:
-            raise ValueError("名称不能为空")
+        return await self.update_metadata(template_id, name=name)
+
+    async def update_metadata(
+        self, template_id: int, name: str | None = None, description: str | None = None
+    ):
+        changes = {}
+        if name is not None:
+            name = name.strip()
+            if not 1 <= len(name) <= 255:
+                raise ValueError("名称须为 1–255 个字符")
+            changes["name"] = name
+        if description is not None:
+            description = description.strip()
+            if len(description) > 2000:
+                raise ValueError("描述不能超过 2000 个字符")
+            changes["description"] = description
+        if not changes:
+            raise ValueError("请提供名称或描述")
         async with self.sessions() as session, session.begin():
             template = await self._owned_template(session, template_id)
-            template.template_name = name
-            # Published manifests are immutable; drafts pick the name up for export.
+            if name is not None:
+                template.template_name = name
+            if description is not None:
+                template.description = description
+            # Catalog metadata can change; published content snapshots stay immutable.
             drafts = (
                 await session.scalars(
-                    select(TemplatePackageVersion).where(
+                    select(TemplatePackageVersion)
+                    .where(
                         TemplatePackageVersion.template_id == template_id,
                         TemplatePackageVersion.status.in_(("draft", "validated")),
                     )
+                    .with_for_update()
                 )
             ).all()
             for row in drafts:
-                manifest = TemplatePackage.model_validate(
-                    {**row.manifest, "name": name}
-                )
+                manifest = TemplatePackage.model_validate({**row.manifest, **changes})
                 row.manifest = manifest.model_dump(mode="json")
                 row.content_hash = manifest.content_hash()
                 row.status, row.validation_report = "draft", None
-        return {"template_id": template_id, "template_name": name}
+            return {
+                "template_id": template_id,
+                "template_name": template.template_name,
+                "description": template.description,
+            }
 
     async def delete_template(self, template_id: int):
         async with self.sessions() as session, session.begin():

@@ -96,10 +96,13 @@ class AIProvider(ABC):
         self, messages: List[AIMessage], **kwargs
     ) -> AIResponse:
         """Collect a provider's text stream; unavailable usage is not estimated."""
+        on_chunk = kwargs.pop("on_chunk", None)
         chunks = []
         async with aclosing(self.stream_chat_completion(messages, **kwargs)) as stream:
             async for chunk in stream:
                 chunks.append(chunk)
+                if on_chunk is not None:
+                    await on_chunk(chunk)
         content = "".join(chunks)
         if not content.strip():
             raise ValueError("模型流式响应为空")

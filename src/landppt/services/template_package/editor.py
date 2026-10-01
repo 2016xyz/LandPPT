@@ -2,12 +2,14 @@
 
 import asyncio
 import json
+from contextlib import aclosing
 from typing import Literal
 
 from pydantic import Field, model_validator
 
 from ..slide.package_generation.content_service import ContentService
 from .builtin import load_builtin_package
+from .reply_stream import reply_completion, stream_replies
 from .schemas import ContractModel, Identifier, PageComponent, TemplatePackage
 from .service import example_assets, validate_package
 
@@ -28,6 +30,7 @@ class ComponentEdit(ContractModel):
 
 
 class EditPlan(ContractModel):
+    reply: str = Field(default="", max_length=4000)
     operations: tuple[ComponentEdit, ...] = Field(min_length=1, max_length=80)
 
     def check_targets(self, package, references):
@@ -81,13 +84,18 @@ def unique_id(base, taken):
     return candidate
 
 
-async def edit_component(content, package, op, prompt, reference, history=()):
+async def edit_component(
+    content, package, op, prompt, reference, history=(), *, emit=None
+):
     """One component, validated alone; retried once with the validation error."""
     problem = ""
     for _ in range(2):
         try:
-            data, _usage = await content.json_completion(
-                '编辑参考页面组件，返回 {"changes":{需要替换的组件字段}}。'
+            data, _usage = await reply_completion(
+                content,
+                '编辑参考页面组件，返回 {"reply":"面向用户的简短调整说明","changes":{需要替换的组件字段}}。'
+                "reply 必须放在第一个字段，简洁说明将怎样修改此页，不展示推理过程、JSON、SVG 或内部校验细节，"
+                "不能在保存前宣称已经保存。"
                 "未提供的字段沿用参考值；slots/examples 等数组若修改必须返回完整数组。"
                 "不得修改目标 ID。新增版式必须按要求调整用途描述和构图。"
                 "允许同步修改 SVG、槽位、内容容量和示例，所有字段必须符合 schema。"
@@ -111,6 +119,8 @@ async def edit_component(content, package, op, prompt, reference, history=()):
                     ensure_ascii=False,
                 ),
                 role="template_generation",
+                segment_id=f"component:{op.component_id}",
+                emit=emit,
             )
             patch = data["changes"]
             if not isinstance(patch, dict) or not patch:
@@ -156,6 +166,16 @@ def _references(package):
 
 
 async def edit_package(service, catalog, source, prompt, history=()):
+    async with aclosing(
+        stream_replies(
+            lambda emit: _edit_package(service, catalog, source, prompt, history, emit)
+        )
+    ) as events:
+        async for item in events:
+            yield item
+
+
+async def _edit_package(service, catalog, source, prompt, history, emit):
     """One round, all-or-nothing: do not persist partial edits of this round."""
     package = TemplatePackage.model_validate(source["manifest"])
     content = ContentService(service)
@@ -173,8 +193,11 @@ async def edit_package(service, catalog, source, prompt, history=()):
     problem = ""
     for attempt in range(2):
         try:
-            data, _ = await content.json_completion(
-                "根据用户要求编辑已有模板包，返回符合 schema 的 operations JSON。"
+            data, _ = await reply_completion(
+                content,
+                "根据用户要求编辑已有模板包，返回符合 schema 的 JSON，包含 reply 和 operations。"
+                "reply 必须放在第一个字段，用用户能理解的语言简洁说明本轮调整，不展示推理过程、代码或内部校验细节，"
+                "不能在保存前宣称已经保存。"
                 "只规划用户要求的修改(modify)、删除(delete)、新增(add)，不要重建整包。"
                 "component_id 使用现有 ID；新增使用不重复的新 ID，并从参考列表选择 reference_id。"
                 "instruction 写清每项要求。一个 ID 只能出现一次；删除后至少保留一个版式。"
@@ -184,6 +207,8 @@ async def edit_package(service, catalog, source, prompt, history=()):
                     {**context, "previous_error": problem}, ensure_ascii=False
                 ),
                 role="template_generation",
+                segment_id="plan",
+                emit=emit,
             )
             plan = EditPlan.model_validate(data)
             plan.check_targets(package, references)
@@ -218,7 +243,7 @@ async def edit_package(service, catalog, source, prompt, history=()):
                 else originals[op.component_id]
             )
             component = await edit_component(
-                content, package, op, prompt, reference, history
+                content, package, op, prompt, reference, history, emit=emit
             )
             components[op.component_id] = component
             yield {
@@ -257,6 +282,27 @@ async def edit_package(service, catalog, source, prompt, history=()):
 async def edit_single_component(
     service, catalog, source, action, instruction, component_id=None, reference_id=None
 ):
+    async with aclosing(
+        stream_replies(
+            lambda emit: _edit_single_component(
+                service,
+                catalog,
+                source,
+                action,
+                instruction,
+                component_id,
+                reference_id,
+                emit,
+            )
+        )
+    ) as events:
+        async for item in events:
+            yield item
+
+
+async def _edit_single_component(
+    service, catalog, source, action, instruction, component_id, reference_id, emit
+):
     """Modify or add exactly one page, skipping the planner."""
     package = TemplatePackage.model_validate(source["manifest"])
     references = _references(package)
@@ -284,7 +330,7 @@ async def edit_single_component(
         "message": "正在修改版式…" if action == "modify" else "正在设计新版式…",
     }
     component = await edit_component(
-        ContentService(service), package, op, instruction, reference
+        ContentService(service), package, op, instruction, reference, emit=emit
     )
     yield {
         "type": "component",

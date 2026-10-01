@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ..auth.middleware import get_current_user_required
 from ..services.slide.package_generation.candidate_filter import compatible_components
@@ -131,8 +131,17 @@ class MoveComponent(RequestModel):
     expected_hash: str | None = Field(None, max_length=64)
 
 
-class RenamePackage(RequestModel):
-    name: str = Field(min_length=1, max_length=255)
+class UpdatePackageMetadata(RequestModel):
+    name: str | None = Field(None, min_length=1, max_length=255)
+    description: str | None = Field(None, max_length=2000)
+
+    @model_validator(mode="after")
+    def require_changes(self):
+        if not self.model_fields_set or any(
+            getattr(self, field) is None for field in self.model_fields_set
+        ):
+            raise ValueError("请提供名称或描述，字段不能为 null")
+        return self
 
 
 class SelectorSettings(RequestModel):
@@ -486,7 +495,11 @@ async def move_component(
 @router.get("/api/global-master-templates/packages/{version_id}/export")
 async def export_package(version_id: int, service=Depends(catalog)):
     version = await checked(service.get(version_id))
-    manifest = {**version["manifest"], "name": version["template_name"]}
+    manifest = {
+        **version["manifest"],
+        "name": version["template_name"],
+        "description": version["description"],
+    }
     if manifest.get("assets"):
         from ..services.template_package.archive import export_archive
 
@@ -512,10 +525,12 @@ async def delete_package_version(version_id: int, service=Depends(catalog)):
 
 
 @router.patch("/api/global-master-templates/package-templates/{template_id}")
-async def rename_package(
-    template_id: int, payload: RenamePackage, service=Depends(catalog)
+async def update_package_metadata(
+    template_id: int, payload: UpdatePackageMetadata, service=Depends(catalog)
 ):
-    return await checked(service.rename(template_id, payload.name))
+    return await checked(
+        service.update_metadata(template_id, **payload.model_dump(exclude_unset=True))
+    )
 
 
 @router.delete("/api/global-master-templates/package-templates/{template_id}")

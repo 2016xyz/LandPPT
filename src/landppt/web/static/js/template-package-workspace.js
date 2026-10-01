@@ -23,7 +23,9 @@
         const meta = node('span', '', 'pw-meta');
         const renameBtn = ui.button('重命名', rename);
         renameBtn.classList.add('pw-quiet');
-        title.append(nameEl, meta, renameBtn);
+        const descriptionBtn = ui.button('编辑描述', editDescription);
+        descriptionBtn.classList.add('pw-quiet');
+        title.append(nameEl, meta, renameBtn, descriptionBtn);
         head.replaceChild(title, head.querySelector('h2'));
 
         const banner = node('div', '', 'pw-banner');
@@ -46,6 +48,12 @@
 
         const stageFrame = node('iframe'); stageFrame.title = '页面预览'; stageFrame.setAttribute('sandbox', '');
         const stagePreview = ui.fitPreview(stageFrame); stagePreview.classList.add('pw-stage-preview');
+        const previewArea = node('div', undefined, 'pw-preview-area'); previewArea.append(stagePreview);
+        const stageObserver = new ResizeObserver(([entry]) => {
+            const {width, height} = entry.contentRect;
+            stagePreview.style.width = `${Math.min(width, height * 16 / 9)}px`;
+        });
+        stageObserver.observe(previewArea);
         const pageLabel = node('div', '', 'pw-page-label');
         const pageTools = node('div', undefined, 'pw-page-tools');
         const upBtn = ui.button('上移', () => move(-1));
@@ -61,7 +69,7 @@
         const pageSubmit = node('button', 'AI 修改此页', 'primary'); pageSubmit.type = 'submit';
         pageForm.append(pageInput, pageSubmit);
         const stage = node('section', undefined, 'pw-stage');
-        stage.append(stagePreview, pageBar, pageForm);
+        stage.append(previewArea, pageBar, pageForm);
 
         const chat = node('aside', undefined, 'pw-chat'); chat.setAttribute('aria-label', 'AI 多轮编辑');
         const chatHead = node('div', undefined, 'pw-chat-head');
@@ -89,7 +97,7 @@
         foot.append(footInfo, footActions);
         modal.append(banner, body, foot);
 
-        modal.addEventListener('close', () => { controller?.abort(); onChange(); }, {once: true});
+        modal.addEventListener('close', () => { stageObserver.disconnect(); controller?.abort(); onChange(); }, {once: true});
         chatInput.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); chatForm.requestSubmit(); } });
         chatForm.addEventListener('submit', e => { e.preventDefault(); aiRound(); });
         pageForm.addEventListener('submit', e => { e.preventDefault(); aiPage(); });
@@ -107,12 +115,14 @@
             busy = value;
             for (const el of modal.querySelectorAll('.pw-body button:not(.pw-page-pick), .pw-body input, .pw-body textarea, .pw-body select, .pw-foot button, .pw-banner button')) el.disabled = value;
             renameBtn.disabled = value;
+            descriptionBtn.disabled = value;
             modal.classList.toggle('is-busy', value);
         }
         function renderHeader() {
             nameEl.textContent = pkg.template_name;
             meta.textContent = `v${pkg.version} · ${pkg.editable ? '草稿' : ({published:'已发布', retired:'已停用', validated:'已校验'}[pkg.status] || pkg.status)}`;
             renameBtn.hidden = !pkg.user_id;
+            descriptionBtn.hidden = !pkg.user_id;
             publishBtn.hidden = !pkg.editable;
             undoBtn.disabled = busy || !undo.length;
             const newer = packages.find(p => p.user_id && p.template_id === pkg.template_id && p.editable && p.version > pkg.version);
@@ -158,7 +168,9 @@
             if (!c) return;
             selected = c.id;
             setFrame(stageFrame, c.id);
-            pageLabel.replaceChildren(node('strong', families[c.family] || c.family), node('span', c.description), node('small', `正文块 ${c.blocks.minimum}–${c.blocks.maximum} · 指标 ${c.metrics.minimum}–${c.metrics.maximum} · 配图 ${c.images.minimum}–${c.images.maximum}`));
+            const description = node('span', c.description); description.title = c.description;
+            const capacity = node('small', `正文块 ${c.blocks.minimum}–${c.blocks.maximum} · 指标 ${c.metrics.minimum}–${c.metrics.maximum} · 配图 ${c.images.minimum}–${c.images.maximum}`); capacity.title = capacity.textContent;
+            pageLabel.replaceChildren(node('strong', families[c.family] || c.family), description, capacity);
             if(c.reference_asset) pageLabel.append(ui.button('对照原稿',()=>{
                 const asset=pkg.manifest.assets?.find(a=>a.id===c.reference_asset);
                 if(!asset)return;
@@ -185,21 +197,39 @@
             if (!component(selected)) selected = pkg.manifest.components[0]?.id;
             refresh();
         }
-        function renderLog() {
+        function renderLog(forceBottom = false) {
+            const stick = forceBottom || log.scrollHeight - log.scrollTop - log.clientHeight < 48;
+            const oldTop = log.scrollTop;
             log.replaceChildren();
             if (!rounds.length) { log.append(node('li', '描述想要的调整，AI 会修改、删除或新增页面。每一轮的结果都会先显示在左侧预览中。', 'pw-log-empty')); return; }
             for (const r of rounds) {
-                const item = node('li', undefined, 'pw-round' + (r.error ? ' is-error' : ''));
+                const pending = !r.done && !r.error;
+                const item = node('li', undefined, 'pw-round' + (r.error ? ' is-error' : '') + (pending ? ' is-streaming' : ''));
+                item.setAttribute('aria-busy', String(pending));
                 item.append(node('p', r.prompt, 'pw-round-ask'));
+                r.replyEl = node('p', Object.values(r.replies || {}).filter(Boolean).join('\n\n'), 'pw-round-reply');
+                r.replyEl.hidden = !r.replyEl.textContent;
+                item.append(r.replyEl);
                 if (r.changes?.length) {
                     const ul = node('ul');
                     for (const ch of r.changes) ul.append(node('li', `${names[ch.action]} · ${ch.component_id}：${ch.description}`));
                     item.append(ul);
                 }
-                if (r.note) item.append(node('p', r.note, 'pw-round-note'));
+                r.noteEl = node('p', r.note || (pending ? '正在回复…' : ''), 'pw-round-note');
+                if (r.noteEl.textContent) item.append(r.noteEl);
                 log.append(item);
             }
-            log.scrollTop = log.scrollHeight;
+            log.scrollTop = stick ? log.scrollHeight : oldTop;
+        }
+        function appendReply(round, item) {
+            if (!round) return;
+            const stick = log.scrollHeight - log.scrollTop - log.clientHeight < 48;
+            round.replies ||= Object.create(null);
+            const key = item.segment_id || 'reply';
+            round.replies[key] = (item.reset ? '' : (round.replies[key] || '')) + (item.text || '');
+            round.replyEl.textContent = Object.values(round.replies).filter(Boolean).join('\n\n');
+            round.replyEl.hidden = !round.replyEl.textContent;
+            if (stick) log.scrollTop = log.scrollHeight;
         }
         async function ensureDraft() {
             if (pkg.editable) return pkg;
@@ -263,8 +293,11 @@
             try { await ui.readEditStream(response, async item => {
                 if (item.type === 'progress') {
                     say(item.message || '');
+                    if (round) { round.note = item.message || '正在回复…'; renderLog(); }
                     if (item.total) { progress.max = item.total; progress.value = item.current; }
                     if (item.component_id && component(item.component_id)) select(item.component_id);
+                } else if (item.type === 'reply') {
+                    appendReply(round, item);
                 } else if (item.type === 'component') {
                     // Live preview before the round is saved.
                     if (item.action === 'delete') {
@@ -300,7 +333,7 @@
             const prompt = chatInput.value.trim();
             if (!prompt) { say('请描述希望怎样修改模板包。', true); return; }
             const round = {prompt};
-            rounds.push(round); renderLog();
+            rounds.push(round); renderLog(true);
             await run(async () => {
                 try {
                     const draft = await ensureDraft();
@@ -324,7 +357,7 @@
             if (!instruction) { say('请填写此页的修改要求。', true); return; }
             const id = selected;
             const round = {prompt: `第 ${pkg.manifest.components.findIndex(c => c.id === id) + 1} 页：${instruction}`};
-            rounds.push(round); renderLog();
+            rounds.push(round); renderLog(true);
             await run(async () => {
                 try {
                     const draft = await ensureDraft();
@@ -347,7 +380,7 @@
             if (!instruction) { say('请描述新页面的用途和布局。', true); return; }
             const reference = addRef.value;
             const round = {prompt: `新增页面：${instruction}`};
-            rounds.push(round); renderLog();
+            rounds.push(round); renderLog(true);
             await run(async () => {
                 try {
                     const draft = await ensureDraft();
@@ -383,6 +416,13 @@
             };
             input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); finish(true); } if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(false); } });
             input.addEventListener('blur', () => finish(true));
+        }
+        async function editDescription() {
+            await run(async () => {
+                if (!await ui.editDescription(pkg)) return;
+                apply(await request(`${api}/${pkg.id}`));
+                say('描述已保存。');
+            });
         }
         async function publish() {
             await run(async () => {

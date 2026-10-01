@@ -6,6 +6,7 @@ from .base import AIResponse
 async def collect_openai_completion(provider, messages, **kwargs):
     if not provider.client:
         raise RuntimeError("OpenAI client not available")
+    on_chunk = kwargs.pop("on_chunk", None)
     config = provider._merge_config(**kwargs)
     if config.get("tools"):
         raise ValueError("Structured streaming completion does not support tool calls")
@@ -15,6 +16,15 @@ async def collect_openai_completion(provider, messages, **kwargs):
             config, [provider._convert_message_to_responses_input(m) for m in messages]
         )
         async with provider.client.responses.stream(**request) as stream:
+            if on_chunk is not None:
+
+                async def text_chunks():
+                    async for event in stream:
+                        if event.type == "response.output_text.delta":
+                            yield event.delta
+
+                async for text in provider._filter_think_chunks(text_chunks()):
+                    await on_chunk(text)
             response = await stream.get_final_response()
         if response.status != "completed":
             raise ValueError(f"模型流式响应未完成：{response.status}")
@@ -42,8 +52,9 @@ async def collect_openai_completion(provider, messages, **kwargs):
         stream = await provider.client.chat.completions.create(**request)
         parts, usage, finish_reason = [], {}, None
         model = config.get("model") or provider.model
-        # close() runs on success, provider errors, timeout and task cancellation.
-        try:
+
+        async def text_chunks():
+            nonlocal model, usage, finish_reason
             async for chunk in stream:
                 model = getattr(chunk, "model", None) or model
                 raw_usage = getattr(chunk, "usage", None)
@@ -59,8 +70,15 @@ async def collect_openai_completion(provider, messages, **kwargs):
                         continue
                     if choice.delta.content:
                         parts.append(choice.delta.content)
+                        yield choice.delta.content
                     if choice.finish_reason is not None:
                         finish_reason = choice.finish_reason
+
+        # close() runs on success, provider errors, timeout and task cancellation.
+        try:
+            async for text in provider._filter_think_chunks(text_chunks()):
+                if on_chunk is not None:
+                    await on_chunk(text)
             if finish_reason != "stop":
                 raise ValueError(
                     f"模型流式响应未完整结束：{finish_reason or '连接提前关闭'}"

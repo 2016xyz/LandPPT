@@ -52,12 +52,14 @@ error.txt
 
 # Runtime artifacts
 canvas/
+/uploads/
 
 # Local test artifacts (do NOT ignore source code)
 *.pdf
 
 # Personal/session notes
 memory/
+/Notes/
 
 # Workspace identity/config (keep private)
 AGENTS.md
