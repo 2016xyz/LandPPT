@@ -345,8 +345,6 @@ In the settings UI or `.env`:
 
 Visual reconstruction uses AI to rebuild editable layouts from slide images and may adjust crowded content or simplify decorations. Background preservation keeps complex graphics as fixed backgrounds and replaces only confirmed content slots. Both modes depend on extractable editable text and do not guarantee complete OCR for scanned images or embedded charts. Supported files: `.pptx` / `.potx` / `.ppsx`, up to 50 MB and 40 selected slides per import.
 
-When credits are enabled and the actual AI provider is `landppt`, PPTX package creation and AI package creation cost **3 credits per AI call**, including planning, analysis, design, repairs, and retries that actually start. Calls that fail or are cancelled after starting still count; insufficient balance stops subsequent calls. Other providers, disabled credits, and parsing, rendering, saving, or import steps without AI calls incur no package creation charge. AI package editing and project generation keep their own billing rules; see [package creation credits](src/landppt/services/template_package/README.md#模板包创建积分).
-
 ### 6. Automation APIs
 
 - API-key auth for CI, scripts, n8n, custom backends  
