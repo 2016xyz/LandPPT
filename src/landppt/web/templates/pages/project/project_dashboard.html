@@ -7,28 +7,42 @@
 /* ── 仪表板 · Admin 风格 ── */
 
 /* 页头 */
-.dashboard-header {
+#dashboardRoot .dashboard-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
-    margin-bottom: 24px;
+    gap: 12px;
+    margin-bottom: 12px;
     flex-wrap: wrap;
 }
 
-.dashboard-header h2 {
-    font-size: 1.15rem;
+#dashboardRoot .dashboard-heading {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    min-width: 0;
+}
+
+#dashboardRoot .dashboard-header h2 {
+    font-size: 20px;
     font-weight: 700;
     color: var(--text-primary);
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     margin: 0;
+    line-height: 1.4;
 }
 
-.dashboard-header p {
-    margin: 4px 0 0;
-    font-size: 0.85rem;
+#dashboardRoot .dashboard-header h2 i {
+    font-size: 18px;
+}
+
+#dashboardRoot .dashboard-header p {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.5;
     color: var(--text-secondary);
 }
 
@@ -36,38 +50,31 @@
 .stats-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 12px;
-    margin-bottom: 24px;
+    gap: 8px;
+    margin-bottom: 16px;
 }
 
 .stat-card {
     background: #fff;
     border: 1px solid var(--border-color, #e5e7eb);
     border-radius: 12px;
-    padding: 16px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
-    transition: all 0.2s ease;
+    padding: 6px 12px;
+    box-shadow: none;
     display: flex;
     align-items: center;
-    gap: 16px;
-}
-
-.stat-card:hover {
-    border-color: #cbd5e1;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.06);
-    transform: translateY(-1px);
+    gap: 10px;
 }
 
 .stat-icon {
-    width: 44px;
-    height: 44px;
-    border-radius: 10px;
+    width: 28px;
+    height: 28px;
+    border-radius: 7px;
     display: flex;
     align-items: center;
     justify-content: center;
     background: #f1f5f9;
     color: #111;
-    font-size: 1.1rem;
+    font-size: 14px;
     flex-shrink: 0;
 }
 
@@ -77,18 +84,19 @@
 }
 
 .stat-number {
-    font-size: 1.8rem;
+    font-size: 20px;
     font-weight: 700;
     letter-spacing: -0.02em;
     color: var(--text-primary);
-    line-height: 1;
-    margin-bottom: 2px;
+    line-height: 1.2;
+    font-variant-numeric: tabular-nums;
 }
 
 .stat-title {
     color: var(--text-secondary);
     font-weight: 500;
-    font-size: 0.82rem;
+    font-size: 12px;
+    line-height: 1.4;
 }
 
 /* 快捷操作 */
@@ -447,8 +455,6 @@
 }
 
 /* 统一项目工作台视觉 */
-.dashboard-header,
-.stat-card,
 .recent-projects-list,
 .empty-state,
 .todo-card {
@@ -456,11 +462,26 @@
     box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
-.dashboard-header {
-    padding: 16px 18px;
-    background: #fff;
-    border: 1px solid var(--border-color, #e5e7eb);
-    margin-bottom: 16px;
+#dashboardRoot .dashboard-header {
+    padding: 0;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    min-height: 40px;
+}
+
+#dashboardRoot .dashboard-header .action-buttons {
+    align-items: center;
+}
+
+#dashboardRoot .dashboard-header .project-action-btn {
+    width: 40px;
+    height: 40px;
+    flex-basis: 40px;
+}
+
+.stat-card {
+    border-radius: 8px;
 }
 
 .recent-projects-header,
@@ -494,6 +515,7 @@
     align-items: center;
     gap: 10px;
     min-width: 0;
+    max-width: 100%;
 }
 
 .project-title-wrap .project-title {
@@ -601,10 +623,6 @@
 
 /* 响应式 */
 @media (max-width: 1180px) {
-    .stats-grid {
-        grid-template-columns: repeat(2, 1fr);
-    }
-
     .project-list-item {
         grid-template-columns: 4px minmax(240px, 1fr) 150px;
     }
@@ -616,19 +634,6 @@
 }
 
 @media (max-width: 768px) {
-    .stats-grid {
-        grid-template-columns: repeat(2, 1fr);
-        gap: 12px;
-    }
-
-    .stat-card {
-        padding: 16px;
-    }
-
-    .stat-number {
-        font-size: 1.5rem;
-    }
-
     .project-list-item {
         padding: 12px 16px;
         grid-template-columns: 4px minmax(0, 1fr);
@@ -656,6 +661,42 @@
         width: 100%;
     }
 }
+
+@media (max-width: 700px) {
+    .stat-card {
+        padding: 6px 8px;
+        gap: 8px;
+    }
+
+    .stat-icon {
+        width: 24px;
+        height: 24px;
+        font-size: 12px;
+    }
+}
+
+@media (max-width: 600px) {
+    #dashboardRoot .dashboard-header {
+        gap: 8px;
+    }
+
+    #dashboardRoot .dashboard-heading {
+        flex-basis: 100%;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    #dashboardRoot .dashboard-header .project-action-btn {
+        width: 44px;
+        height: 44px;
+        flex-basis: 44px;
+    }
+
+    .stats-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+}
 </style>
 {% endblock %}
 
@@ -664,7 +705,7 @@
 
 <!-- 页头 -->
 <div class="dashboard-header">
-    <div>
+    <div class="dashboard-heading">
         <h2><i class="fas fa-tachometer-alt"></i> 项目仪表板</h2>
         <p>管理您的 PPT 项目，跟踪进度</p>
     </div>

@@ -204,6 +204,56 @@ def test_profile_tabs_and_long_email_stay_inside_mobile_panel(ui_page, width):
     )
 
 
+@pytest.mark.parametrize(
+    "width,height",
+    [(1440, 900), (1024, 768), (720, 450), (601, 768), (390, 844), (320, 568)],
+)
+def test_dashboard_summary_keeps_projects_near_top_without_overflow(
+    ui_page, width, height
+):
+    page, load = ui_page
+    page.set_viewport_size({"width": width, "height": height})
+    load(
+        "pages/project/project_dashboard.html",
+        path="/dashboard",
+        total_projects=999999,
+        completed_projects=999999,
+        in_progress_projects=0,
+        draft_projects=0,
+        recent_projects=[
+            dict(
+                project_id="ui-test",
+                title="长项目名称与研发团队的跨部门协作计划" * 4,
+                scenario="general",
+                status="completed",
+                updated_at=datetime(2026, 10, 2),
+            )
+        ],
+    )
+    header = page.locator(".dashboard-header").bounding_box()
+    recent = page.locator(".recent-projects-header").bounding_box()
+    assert recent["y"] - header["y"] <= (260 if width <= 600 else 140)
+    assert page.evaluate("document.documentElement.scrollWidth") <= width
+    for card in page.locator(".stat-card").all():
+        assert card.evaluate(
+            "e => {const card=e.getBoundingClientRect();"
+            "return [...e.querySelectorAll('.stat-icon,.stat-number,.stat-title')]"
+            ".every(child=>{const r=child.getBoundingClientRect();"
+            "return r.left>=card.left && r.right<=card.right && "
+            "child.scrollWidth<=child.clientWidth+1})}"
+        )
+    create = page.get_by_role("link", name="创建项目", exact=True).first
+    all_projects = page.get_by_role("link", name="所有项目", exact=True)
+    assert create.get_attribute("href") == "/scenarios"
+    assert all_projects.get_attribute("href") == "/projects"
+    for action in (create, all_projects):
+        assert action.bounding_box()["height"] >= (44 if width <= 600 else 40)
+        assert action.evaluate(
+            "e => {const r=e.getBoundingClientRect();"
+            "return e.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))}"
+        )
+
+
 @pytest.mark.parametrize("template", ["projects_list", "project_dashboard"])
 def test_project_dialog_traps_focus_and_restores_trigger(ui_page, template):
     page, load = ui_page
