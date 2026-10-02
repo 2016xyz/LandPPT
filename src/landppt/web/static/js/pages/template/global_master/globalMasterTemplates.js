@@ -237,8 +237,10 @@ function buildTemplateCard(template) {
     const isUserOwnedTemplate = template.user_id !== null && template.user_id !== undefined;
     const canEditOrDelete = isAdminUser || isUserOwnedTemplate;
     const canSetDefault = isUserOwnedTemplate || isAdminUser;
-    const actions = [
-        canEditOrDelete ? `<button class="btn btn-sm btn-primary" data-action="edit" data-template-id="${template.id}"><i class="fas fa-pen"></i> 编辑</button>` : '',
+    const primaryAction = canEditOrDelete
+        ? `<button class="btn btn-sm btn-primary" data-action="edit" data-template-id="${template.id}"><i class="fas fa-pen" aria-hidden="true"></i> 编辑</button>`
+        : `<button class="btn btn-sm btn-primary" data-action="preview" data-template-id="${template.id}"><i class="fas fa-eye" aria-hidden="true"></i> 预览</button>`;
+    const secondaryActions = [
         `<button class="btn btn-sm btn-secondary" data-action="duplicate" data-template-id="${template.id}"><i class="fas fa-clone"></i> 复制</button>`,
         `<button class="btn btn-sm btn-outline" data-action="export-json" data-template-id="${template.id}"><i class="fas fa-download"></i> 导出JSON</button>`,
         `<button class="btn btn-sm btn-outline" data-action="export-pptx" data-template-id="${template.id}"><i class="fas fa-file-powerpoint"></i> 导出PPTX</button>`,
@@ -259,16 +261,20 @@ function buildTemplateCard(template) {
             </div>
         </div>
         <div class="template-info">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
-                <h4 style="margin: 0; color: #2c3e50; font-size: 16px;">${template.template_name}</h4>
+            <div class="template-card-heading">
+                <h4>${template.template_name}</h4>
                 ${defaultBadge}
             </div>
-            <p style="margin: 0 0 8px 0; color: #666; font-size: 14px; line-height: 1.4;">${template.description || '暂无描述'}</p>
+            <p class="template-description">${template.description || '暂无描述'}</p>
             <div style="margin-bottom: 8px;">${tags}</div>
-            <div style="font-size: 12px; color: #999;">使用次数: ${template.usage_count} | 创建者: ${template.created_by}</div>
+            <div class="template-meta">使用次数: ${template.usage_count} | 创建者: ${template.created_by}</div>
         </div>
         <div class="template-actions">
-            ${actions}
+            ${primaryAction}
+            <details class="ui-action-menu">
+                <summary>更多操作 <i class="fas fa-chevron-down" aria-hidden="true"></i></summary>
+                <div class="ui-action-menu-panel">${secondaryActions}</div>
+            </details>
         </div>
     `;
 

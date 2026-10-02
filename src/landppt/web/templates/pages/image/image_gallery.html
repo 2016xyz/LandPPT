@@ -573,25 +573,27 @@
     text-align: right;
 }
 </style>
+<link rel="stylesheet" href="/static/css/pages/image/gallery.css?v=20261002-colour">
 {% endblock %}
 
 {% block content %}
+<section class="gallery-page" aria-labelledby="gallery-title">
 <!-- 页头 -->
 <div class="gallery-header">
     <div>
-        <h2><i class="fas fa-images"></i> 本地图床管理</h2>
+        <h2 id="gallery-title"><i class="fas fa-images" aria-hidden="true"></i> 本地图床管理</h2>
         <p>管理和浏览您的本地图片库</p>
     </div>
     <div class="gallery-header-actions">
         <button class="btn btn-primary" id="upload-trigger"><i class="fas fa-upload"></i> 上传图片</button>
-        <button class="btn btn-outline" id="batch-mode-btn"><i class="fas fa-check-square"></i> 批量选择</button>
+        <button class="btn btn-outline" id="batch-mode-btn" aria-pressed="false" aria-controls="batch-toolbar"><i class="fas fa-check-square"></i> 批量选择</button>
         <button class="btn btn-outline" id="refresh-btn"><i class="fas fa-sync-alt"></i> 刷新</button>
     </div>
 </div>
 
 <!-- 控制栏 -->
 <div class="gallery-controls">
-    <select id="category-filter">
+    <select id="category-filter" aria-label="图片分类">
         <option value="all">全部分类</option>
         <option value="ai_generated">AI生成</option>
         <option value="web_search">网络搜索</option>
@@ -599,11 +601,11 @@
     </select>
     <div class="controls-divider"></div>
     <div class="gallery-search">
-        <input type="text" id="search-input" placeholder="搜索图片...">
+        <input type="text" id="search-input" placeholder="搜索图片..." aria-label="搜索图片">
         <span class="search-icon"><i class="fas fa-search"></i></span>
     </div>
     <div class="controls-divider"></div>
-    <select id="sort-option">
+    <select id="sort-option" aria-label="图片排序">
         <option value="created_desc">最新创建</option>
         <option value="created_asc">最早创建</option>
         <option value="accessed_desc">最近访问</option>
@@ -621,7 +623,7 @@
         <button class="btn btn-sm btn-outline" data-action="select-all">全选</button>
         <button class="btn btn-sm btn-outline" data-action="clear-selection">清除选择</button>
         <button class="btn btn-sm btn-danger" data-action="batch-delete">删除选中</button>
-        <button class="btn btn-sm btn-success" data-action="batch-download">下载选中</button>
+        <button class="btn btn-sm btn-outline" data-action="batch-download">下载选中</button>
         <div class="controls-divider"></div>
         <button class="btn btn-sm btn-danger" id="clear-all-btn">清空我的图库</button>
     </div>
@@ -629,9 +631,9 @@
 
 <!-- 图片网格 -->
 <div id="image-grid" class="image-grid">
-    <div style="grid-column: 1 / -1; text-align: center; padding: 48px; color: var(--text-secondary);">
-        <div style="font-size: 2rem; margin-bottom: 12px; opacity: 0.5;">⏳</div>
-        <p style="font-weight: 500;">正在加载图片库...</p>
+    <div class="gallery-empty" role="status">
+        <i class="fas fa-circle-notch fa-spin" aria-hidden="true"></i>
+        <p>正在加载图片库...</p>
     </div>
 </div>
 
@@ -690,7 +692,7 @@
                 </div>
 
                 <div class="upload-button-container">
-                    <button class="btn btn-success" id="start-upload-btn"><i class="fas fa-upload"></i> 开始上传</button>
+                    <button class="btn btn-primary" id="start-upload-btn"><i class="fas fa-upload"></i> 开始上传</button>
                 </div>
             </div>
 
@@ -759,7 +761,7 @@
                                 </select>
                             </div>
                             <div class="edit-actions">
-                                <button class="btn btn-sm btn-success" id="save-image-btn"><i class="fas fa-save"></i> 保存</button>
+                                <button class="btn btn-sm btn-primary" id="save-image-btn"><i class="fas fa-save"></i> 保存</button>
                                 <button class="btn btn-sm btn-secondary" id="cancel-edit-btn"><i class="fas fa-times"></i> 取消</button>
                             </div>
                         </div>
@@ -790,8 +792,9 @@
     </div>
 </div>
 
+</section>
 {% endblock %}
 
 {% block extra_js %}
-<script type="module" src="/static/js/pages/image/imageGallery.js"></script>
+<script type="module" src="/static/js/pages/image/imageGallery.js?v=20261002-colour"></script>
 {% endblock %}

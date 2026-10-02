@@ -78,9 +78,10 @@ function renderImageGrid() {
 
     if (filteredImages.length === 0) {
         grid.innerHTML = `
-            <div class="loading-placeholder" style="text-align: center; padding: 60px; color: var(--text-secondary); grid-column: 1 / -1;">
-                <div style="font-size: 3em; margin-bottom: 20px;"><i class="fas fa-image"></i></div>
+            <div class="gallery-empty">
+                <i class="far fa-images" aria-hidden="true"></i>
                 <p>暂无图片</p>
+                <small>上传图片，建立可重复使用的素材库。</small>
             </div>
         `;
         return;
@@ -107,6 +108,9 @@ function renderImageGrid() {
         const img = document.createElement('img');
         img.alt = image.title || image.filename;
         img.className = 'image-thumbnail';
+        img.tabIndex = 0;
+        img.setAttribute('role', 'button');
+        img.setAttribute('aria-label', `查看图片：${image.title || image.filename}`);
         img.dataset.src = `${window.location.origin}/api/image/thumbnail/${image.image_id}`;
         img.src = placeholderSrc;
         img.onerror = () => { img.src = placeholderSrc; };
@@ -119,6 +123,7 @@ function renderImageGrid() {
         const title = document.createElement('div');
         title.className = 'image-title';
         title.textContent = image.title || image.filename;
+        title.title = image.title || image.filename;
         info.appendChild(title);
 
         const meta = document.createElement('div');
@@ -129,9 +134,9 @@ function renderImageGrid() {
         const actions = document.createElement('div');
         actions.className = 'image-actions';
         actions.innerHTML = `
-            <button class="btn btn-sm btn-outline" data-action="copy" data-image-id="${image.image_id}" title="复制链接"><i class="fas fa-link"></i></button>
-            <button class="btn btn-sm btn-primary" data-action="download" data-image-id="${image.image_id}" title="下载"><i class="fas fa-download"></i></button>
-            <button class="btn btn-sm btn-danger" data-action="delete" data-image-id="${image.image_id}" title="删除"><i class="fas fa-trash-alt"></i></button>
+            <button class="btn gallery-action" data-action="copy" data-image-id="${image.image_id}" title="复制链接"><i class="fas fa-link" aria-hidden="true"></i><span>复制链接</span></button>
+            <button class="btn gallery-action" data-action="download" data-image-id="${image.image_id}" title="下载"><i class="fas fa-download" aria-hidden="true"></i><span>下载</span></button>
+            <button class="btn gallery-action" data-action="delete" data-image-id="${image.image_id}" title="删除" aria-label="删除图片"><i class="far fa-trash-alt" aria-hidden="true"></i></button>
         `;
         info.appendChild(actions);
 
@@ -161,6 +166,14 @@ function bindControls() {
 function bindGridEvents() {
     const grid = document.getElementById('image-grid');
     if (!grid) return;
+
+    grid.addEventListener('keydown', (event) => {
+        const thumbnail = event.target.closest('.image-thumbnail');
+        if (!thumbnail || !['Enter', ' '].includes(event.key)) return;
+        event.preventDefault();
+        const imageId = thumbnail.closest('.image-item')?.dataset.imageId;
+        if (imageId) showImageDetail(imageId);
+    });
 
     grid.addEventListener('click', (event) => {
         const actionBtn = event.target.closest('[data-action]');
@@ -431,14 +444,16 @@ function toggleBatchMode() {
 
     if (batchMode) {
         btn.innerHTML = '<i class="fas fa-times"></i> 退出批量';
-        btn.className = 'btn btn-danger';
-        toolbar.style.display = 'block';
+        btn.className = 'btn btn-outline';
+        toolbar.style.display = 'flex';
     } else {
         btn.innerHTML = '<i class="fas fa-check-square"></i> 批量选择';
         btn.className = 'btn btn-outline';
         toolbar.style.display = 'none';
         selectedImages.clear();
     }
+
+    btn.setAttribute('aria-pressed', String(batchMode));
 
     renderImageGrid();
     updateSelectedCount();

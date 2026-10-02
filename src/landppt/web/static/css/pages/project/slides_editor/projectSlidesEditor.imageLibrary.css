@@ -866,6 +866,7 @@
     .ai-edit-sidebar-header {
         border-radius: 0;
         padding: var(--spacing-xs) var(--spacing-sm);
+        flex-wrap: wrap;
     }
 
     .ai-edit-content {
@@ -873,14 +874,21 @@
     }
 
     .ai-input-buttons {
-        flex-direction: column;
-        gap: var(--spacing-sm);
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 8px;
     }
 
     .ai-send-btn {
-        width: 100%;
+        width: auto;
+        flex: 1 1 80px;
         justify-content: center;
     }
+
+    .ai-input-buttons > button { min-width: 44px; min-height: 44px; }
+    .ai-input-container { padding: 12px; gap: 10px; }
+    .ai-empty-hint { flex-wrap: wrap; }
+    .ai-empty-hint-chip { flex-shrink: 0; max-width: none; }
 
     .ai-clear-context-btn {
         align-self: center;

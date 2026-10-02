@@ -62,7 +62,7 @@
 
 .reports-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
     gap: 20px;
     margin-top: 20px;
 }
@@ -150,9 +150,9 @@
             输入一个主题来测试DEEP Research功能：
         </p>
         
-        <div style="display: flex; gap: 10px; align-items: center;">
+        <div class="research-test-form" style="display: flex; gap: 10px; align-items: center;">
             <input type="text" id="test-topic" placeholder="例如：人工智能发展趋势" aria-label="研究主题"
-                   style="flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+                   style="flex: 1; min-width: 0; padding: 10px; border: 1px solid #ddd; border-radius: 10px;">
             <button onclick="testResearch()" class="btn btn-primary" id="test-btn">
                 开始研究
             </button>

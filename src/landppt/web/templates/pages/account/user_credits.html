@@ -163,6 +163,7 @@
 
     .redeem-form input {
         flex: 1;
+        min-width: 0;
         padding: 12px 12px;
         border: 1px solid var(--border-color);
         border-radius: var(--border-radius-md);
@@ -345,6 +346,9 @@
         .credits-alerts {
             min-width: unset;
         }
+
+        .redeem-form { flex-direction: column; }
+        .redeem-form .btn { width: 100%; }
     }
 </style>
 {% endblock %}

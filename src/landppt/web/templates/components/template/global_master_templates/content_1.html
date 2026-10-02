@@ -10,7 +10,7 @@
         </div>
         <div class="page-header-actions">
             <button id="createTemplateBtn" class="btn btn-primary"><i class="fas fa-plus"></i> 新建模板</button>
-            <button id="generateWithAIBtn" class="btn btn-success"><i class="fas fa-wand-magic-sparkles"></i> AI生成</button>
+            <button id="generateWithAIBtn" class="btn btn-secondary"><i class="fas fa-wand-magic-sparkles"></i> AI生成</button>
             <input type="file" id="importTemplateInput" accept=".html,.json" style="display: none;">
             <button id="importTemplateBtn" class="btn btn-outline"><i class="fas fa-file-import"></i> 导入</button>
         </div>
@@ -31,7 +31,7 @@
     </div>
 
     <!-- 模板网格 -->
-    <div id="templatesGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px;">
+    <div id="templatesGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 16px;">
         <!-- 模板卡片由 JS 渲染 -->
     </div>
 

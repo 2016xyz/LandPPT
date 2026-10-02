@@ -7,7 +7,8 @@
     <title>积分管理 - LandPPT Admin</title>
     <link rel="icon" type="image/svg+xml" href="/static/images/landppt-logo.png">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <link rel="stylesheet" href="/static/css/admin.css">
+    <link rel="stylesheet" href="/static/css/admin.css?v=20261002-system">
+    <script src="/static/js/shared/ui.js?v=20261002-system" defer></script>
     <link rel="stylesheet" href="/static/css/shared/notify.css">
     <script src="/static/js/shared/notify.js?v=20260726"></script>
 
@@ -92,9 +93,11 @@
             color: var(--ink);
         }
     </style>
+<link rel="stylesheet" href="/static/css/pages/settings/settings.css?v=20261002-settings">
+    <script src="/static/js/pages/settings/settings.js?v=20261002-settings" defer></script>
 </head>
 
-<body class="admin-body">
+<body class="admin-body settings-page settings-admin">
     <div class="toast-container" id="toastContainer"></div>
 
     <div class="header">
@@ -112,10 +115,14 @@
     </div>
 
     <div class="container">
+        <div class="settings-page-intro">
+            <h2>积分兑换管理</h2>
+            <p>创建兑换码，并按使用状态、创建人或备注查询已有记录。</p>
+        </div>
         <div class="toolbar">
             <div class="tabs" style="margin:0;">
-                <button class="tab active" onclick="showPanel('generate')">生成兑换码</button>
-                <button class="tab" onclick="showPanel('list')">兑换码列表</button>
+                <button class="tab active" onclick="showPanel('generate')" aria-controls="generatePanel">生成兑换码</button>
+                <button class="tab" onclick="showPanel('list')" aria-controls="listPanel">兑换码列表</button>
             </div>
         </div>
 

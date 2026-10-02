@@ -7,6 +7,7 @@
 
         // 初始化
         document.addEventListener('DOMContentLoaded', function () {
+            initConfigTabs();
             // 加载初始配置
             loadAllConfigs();
             // 检查图片服务状态
@@ -33,6 +34,39 @@
         }
 
 
+        function initConfigTabs() {
+            const list = document.querySelector('.config-tabs');
+            if (!list) return;
+            const tabs = Array.from(list.querySelectorAll('.tab-btn[data-tab]'));
+            list.setAttribute('role', 'tablist');
+            list.setAttribute('aria-label', '系统配置分类');
+            tabs.forEach(tab => {
+                tab.id = 'config-tab-' + tab.dataset.tab;
+                tab.setAttribute('role', 'tab');
+                tab.setAttribute('aria-controls', tab.dataset.tab);
+                tab.setAttribute('aria-selected', String(tab.classList.contains('active')));
+                tab.tabIndex = tab.classList.contains('active') ? 0 : -1;
+                const panel = document.getElementById(tab.dataset.tab);
+                if (panel) {
+                    panel.setAttribute('role', 'tabpanel');
+                    panel.setAttribute('aria-labelledby', tab.id);
+                }
+                tab.addEventListener('keydown', event => {
+                    const index = tabs.indexOf(tab);
+                    let next;
+                    if (event.key === 'ArrowRight') next = (index + 1) % tabs.length;
+                    else if (event.key === 'ArrowLeft') next = (index - 1 + tabs.length) % tabs.length;
+                    else if (event.key === 'Home') next = 0;
+                    else if (event.key === 'End') next = tabs.length - 1;
+                    else return;
+                    event.preventDefault();
+                    tabs[next].click();
+                    tabs[next].focus();
+                    tabs[next].scrollIntoView({block: 'nearest', inline: 'nearest'});
+                });
+            });
+        }
+
         // 标签页切换功能
         function switchTab(tabName) {
             // 隐藏所有标签页内容
@@ -44,6 +78,8 @@
             // 移除所有标签按钮的激活状态
             document.querySelectorAll('.tab-btn').forEach(btn => {
                 btn.classList.remove('active');
+                btn.setAttribute('aria-selected', 'false');
+                btn.tabIndex = -1;
             });
 
             // 显示选中的标签页内容
@@ -57,6 +93,8 @@
             const targetBtn = document.querySelector(`[data-tab="${tabName}"]`);
             if (targetBtn) {
                 targetBtn.classList.add('active');
+                targetBtn.setAttribute('aria-selected', 'true');
+                targetBtn.tabIndex = 0;
             }
 
             // 加载对应的配置数据
@@ -389,6 +427,7 @@
         function toggleModelRoleSettings() {
             const settingsDiv = document.getElementById('model-role-settings');
             const toggleBtn = document.getElementById('model-role-toggle-btn');
+            toggleBtn.setAttribute('aria-expanded', String(!modelRoleSettingsExpanded));
 
             if (settingsDiv && toggleBtn) {
                 if (settingsDiv.style.display === 'none' || !settingsDiv.style.display) {
@@ -1174,56 +1213,7 @@
 
         // 通知功能
         function showNotification(message, type = 'info') {
-            // 创建通知元素
-            const notification = document.createElement('div');
-            notification.className = `notification notification-${type}`;
-            notification.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        padding: 15px 20px;
-        border-radius: 8px;
-        color: white;
-        font-weight: 600;
-        z-index: 10000;
-        max-width: 400px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        transform: translateX(100%);
-        transition: transform 0.3s ease;
-    `;
-
-            // 设置背景颜色（成功/错误/警告使用语义色，与 base.html 的 alert 约定一致）
-            switch (type) {
-                case 'success':
-                    notification.style.background = '#16a34a';
-                    break;
-                case 'error':
-                    notification.style.background = '#ef4444';
-                    break;
-                case 'warning':
-                    notification.style.background = '#f59e0b';
-                    break;
-                default:
-                    notification.style.background = 'linear-gradient(135deg, #2a2a2a 0%, #0f0f0f 100%)';
-            }
-
-            notification.textContent = message;
-            document.body.appendChild(notification);
-
-            // 显示动画
-            setTimeout(() => {
-                notification.style.transform = 'translateX(0)';
-            }, 100);
-
-            // 自动隐藏
-            setTimeout(() => {
-                notification.style.transform = 'translateX(100%)';
-                setTimeout(() => {
-                    if (notification.parentNode) {
-                        notification.parentNode.removeChild(notification);
-                    }
-                }, 300);
-            }, 3000);
+            Notify.toast(message, { type, duration: 3000 });
         }
 
         function showLoading(message) {
@@ -1233,7 +1223,7 @@
             <p>${message}</p>
         </div>
     `;
-            document.getElementById('testModal').style.display = 'block';
+            document.getElementById('testModal').style.display = 'flex';
         }
 
         function showTestResult(result, success) {
@@ -1288,7 +1278,7 @@
             }
 
             document.getElementById('testResults').innerHTML = content;
-            document.getElementById('testModal').style.display = 'block';
+            document.getElementById('testModal').style.display = 'flex';
         }
 
         function showAllTestResults(results) {
@@ -1315,7 +1305,7 @@
             content += '</div>';
 
             document.getElementById('testResults').innerHTML = content;
-            document.getElementById('testModal').style.display = 'block';
+            document.getElementById('testModal').style.display = 'flex';
         }
 
         function closeTestModal() {
@@ -1394,7 +1384,7 @@
                 `;
             }
             if (modal) {
-                modal.style.display = 'block';
+                modal.style.display = 'flex';
             }
 
             const startedAt = Date.now();
@@ -1492,7 +1482,7 @@
             }
 
             document.getElementById('testResults').innerHTML = content;
-            document.getElementById('testModal').style.display = 'block';
+            document.getElementById('testModal').style.display = 'flex';
         }
 
 

@@ -52,7 +52,9 @@ def workspace_page(browser):
         ),
     )
     page.goto("http://workspace.test/")
+    page.evaluate("document.body.classList.add('landppt-app')")
     page.add_style_tag(path=str(STATIC / "css/template-packages.css"))
+    page.add_style_tag(path=str(STATIC / "css/shared/ui.css"))
     page.add_script_tag(path=str(STATIC / "js/template-packages.js"))
     page.add_script_tag(path=str(STATIC / "js/template-package-workspace.js"))
     component = {

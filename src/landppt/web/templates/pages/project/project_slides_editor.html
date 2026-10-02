@@ -23,15 +23,16 @@
     <link rel="stylesheet" href="/static/css/pages/project/slides_editor/projectSlidesEditor.nativeChat.css?v=20260402-split">
     <link rel="stylesheet" href="/static/css/pages/project/slides_editor/projectSlidesEditor.quickEdit.css?v=20260726-agent-loop-v2">
 <link rel="stylesheet" href="/static/css/pages/project/slides_editor/projectSlidesEditor.svgEdit.css?v=20260913-svg-editor-v4">
-    <link rel="stylesheet" href="/static/css/pages/project/slides_editor/projectSlidesEditor.imageLibrary.css?v=20260402-split">
+    <link rel="stylesheet" href="/static/css/pages/project/slides_editor/projectSlidesEditor.imageLibrary.css?v=20261002-controls">
     <link rel="stylesheet" href="/static/css/pages/project/slides_editor/projectSlidesEditor.speechDialog.css?v=20260402-split">
     <link rel="stylesheet" href="/static/css/pages/project/slides_editor/projectSlidesEditor.speechModal.css?v=20260402-split">
     <link rel="stylesheet" href="/static/css/pages/project/slides_editor/projectSlidesEditor.export.css?v=20260402-split">
     <link rel="stylesheet" href="/static/css/pages/project/slides_editor/projectSlidesEditor.changeTemplate.css?v=20260404">
-    <link rel="stylesheet" href="/static/css/pages/project/slides_editor/projectSlidesEditor.workspace.css?v=20260929-3">
+    <link rel="stylesheet" href="/static/css/pages/project/slides_editor/projectSlidesEditor.workspace.css?v=20261002-controls">
+    <link rel="stylesheet" href="/static/css/shared/ui.css?v=20261002-system">
 </head>
 
-<body>
+<body class="landppt-editor">
     <div class="editor-container">
         <header class="editor-header workspace-header">
             <button type="button" class="workspace-sidebar-toggle" id="slidesSidebarToggle"
@@ -613,7 +614,7 @@
         <div class="ai-sidebar-resize-handle" id="aiSidebarResizeHandle"></div>
         <div class="ai-edit-sidebar-header">
             <h4><i class="fas fa-robot"></i> AI编辑助手</h4>
-            <div class="d-flex align-items-center" style="gap: var(--spacing-sm);">
+            <div class="ai-header-tools d-flex align-items-center" style="gap: var(--spacing-sm);">
                 <div class="ai-current-slide-info" id="aiCurrentSlideInfo">
                     第1页
                 </div>
@@ -629,7 +630,7 @@
                     <button class="ai-outline-btn" onclick="autoGenerateSlideImages()" title="一键配图">
                         <i class="fas fa-magic"></i>
                     </button>
-                    <button class="ai-edit-sidebar-close" onclick="closeAIEditSidebar()">
+                    <button class="ai-edit-sidebar-close" onclick="closeAIEditSidebar()" aria-label="关闭 AI 编辑助手">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
@@ -654,7 +655,7 @@
                 </div>
 
                 <div class="ai-input-container">
-                    <textarea class="ai-input-box" id="aiInputBox" placeholder="请输入您的编辑指令..." rows="3"></textarea>
+                    <textarea class="ai-input-box" id="aiInputBox" aria-label="AI 编辑指令" placeholder="请输入您的编辑指令..." rows="3"></textarea>
 
 
                     <div class="ai-input-buttons">
@@ -831,7 +832,7 @@
             </div>
         </div>
     </div>
-    <link rel="stylesheet" href="/static/css/template-packages.css?v=20260925-workspace">
+    <link rel="stylesheet" href="/static/css/template-packages.css?v=20261002-controls">
     <script src="/static/js/template-packages.js?v=20260925-workspace"></script>
     <script src="/static/js/pages/project/slides_editor/projectSlidesEditor.workspace.js?v=20260929-1"></script>
 </body>

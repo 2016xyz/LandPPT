@@ -1,0 +1,62 @@
+/* Keep the library's chrome quiet so that the images lead the page. */
+.landppt-app .gallery-page .gallery-header { align-items: center; margin: 0 0 24px; }
+.landppt-app .gallery-page .gallery-header h2 { gap: 12px; font-size: 24px; letter-spacing: -.02em; }
+.landppt-app .gallery-page .gallery-header h2 > i { color: var(--ui-accent); font-size: 22px; }
+.landppt-app .gallery-page .gallery-header p { margin-top: 8px; font-size: 14px; color: var(--ui-muted); }
+.landppt-app .gallery-page .gallery-header-actions { gap: 8px; }
+.landppt-app .gallery-page .gallery-header-actions .btn-outline { color: #505867; background: #fff; }
+.landppt-app .gallery-page #batch-mode-btn[aria-pressed=true] { background: var(--ui-accent-soft); border-color: #d8ddf5; color: var(--ui-accent-strong); }
+.landppt-app .gallery-page .gallery-controls { gap: 12px; margin-bottom: 24px; padding: 12px; border: 0; background: var(--ui-subtle); border-radius: 12px; box-shadow: none; }
+.landppt-app .gallery-page .gallery-search { flex: 1 1 300px; max-width: 440px; min-width: 0; }
+.landppt-app .gallery-page .gallery-search .search-icon { color: #8a909d; }
+.landppt-app .gallery-page .controls-divider { display: none; }
+.landppt-app .gallery-page .gallery-controls select { min-width: 132px; padding-right: 36px !important; }
+.landppt-app .gallery-page .gallery-controls #sort-option { margin-left: auto; }
+.landppt-app .gallery-page .batch-toolbar { padding: 12px 16px; background: var(--ui-accent-soft); border-color: #d8ddf5; box-shadow: none; }
+.landppt-app .gallery-page .batch-info { font-weight: 500; color: var(--ui-accent-strong); }
+.landppt-app .gallery-page .batch-actions { gap: 8px; }
+.landppt-app .gallery-page .image-grid { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 20px; }
+.landppt-app .gallery-page .image-item { border-color: var(--ui-border); border-radius: 12px; background: var(--ui-paper); box-shadow: 0 2px 6px rgb(32 38 53 / 3%); transition: border-color .15s, box-shadow .15s; }
+.landppt-app .gallery-page .image-item:hover { border-color: #cdd2dc; box-shadow: 0 5px 14px rgb(32 38 53 / 7%); transform: none; }
+.landppt-app .gallery-page .image-item.selected { border-color: var(--ui-accent); box-shadow: 0 0 0 2px rgb(82 99 204 / 15%); }
+.landppt-app .gallery-page .image-thumbnail { display: block; height: auto; aspect-ratio: 4 / 3; object-fit: cover; border: 0; background: var(--ui-subtle); }
+.landppt-app .gallery-page .image-thumbnail:focus-visible { outline-color: var(--ui-accent); outline-offset: -4px; }
+.landppt-app .gallery-page .image-info { padding: 16px; }
+.landppt-app .gallery-page .image-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; min-height: 42px; margin-bottom: 10px; white-space: normal; overflow-wrap: anywhere; font-size: 14px; font-weight: 600; line-height: 21px; color: var(--ui-ink); }
+.landppt-app .gallery-page .image-meta { gap: 12px; margin: 0; font-size: 12px; font-variant-numeric: tabular-nums; }
+.landppt-app .gallery-page .image-source { padding: 3px 7px; border: 0; border-radius: 5px; background: var(--ui-subtle); font-size: 12px; font-weight: 500; color: #646c7c; }
+.landppt-app .gallery-page .image-actions { align-items: center; justify-content: flex-start; gap: 6px; margin-top: 14px; padding-top: 10px; border-top: 1px solid #eff0f3; }
+.landppt-app .gallery-page .gallery-action { display: inline-flex; align-items: center; gap: 6px; min-width: 0; min-height: 36px; padding: 7px 8px; border: 0; border-radius: 7px; background: transparent; color: #626a7b; font-size: 13px !important; font-weight: 500; }
+.landppt-app .gallery-page .gallery-action:hover { background: var(--ui-accent-soft); color: var(--ui-accent-strong); }
+.landppt-app .gallery-page .gallery-action[data-action=delete] { flex: 0 0 36px; width: 36px; margin-left: auto; padding: 0; justify-content: center; }
+.landppt-app .gallery-page .gallery-action[data-action=delete]:hover { color: var(--ui-danger); background: var(--ui-danger-soft); }
+.landppt-app .gallery-page .batch-checkbox { width: 22px; height: 22px; accent-color: var(--ui-accent); }
+.landppt-app .gallery-page .gallery-empty { grid-column: 1 / -1; padding: 64px 24px; border: 1px dashed #d8dce5; border-radius: 12px; text-align: center; background: var(--ui-subtle); color: var(--ui-muted); }
+.landppt-app .gallery-page .gallery-empty > i { margin-bottom: 14px; color: #8c97ca; font-size: 32px; }
+.landppt-app .gallery-page .gallery-empty p { margin: 0 0 6px; color: #4e5667; font-size: 16px; font-weight: 600; }
+.landppt-app .gallery-page .gallery-empty small { font-size: 13px; }
+.landppt-app .gallery-page .upload-area { background: var(--ui-subtle); border-color: #d8dce5; }
+.landppt-app .gallery-page .upload-area:is(:hover, .drag-over) { border-color: var(--ui-accent); background: var(--ui-accent-soft); }
+.landppt-app .gallery-page .upload-area .upload-icon { color: #8c97ca; }
+.landppt-app .gallery-page .progress-fill { background: var(--ui-accent); }
+.landppt-app .gallery-page .pagination button.active { background: var(--ui-accent); border-color: var(--ui-accent); }
+.landppt-app .gallery-page .modal-header > h3 { color: var(--ui-ink); }
+@media (max-width: 800px) {
+    .landppt-app .gallery-page .image-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+    .landppt-app .gallery-page .gallery-controls #sort-option { margin-left: 0; }
+}
+@media (max-width: 600px) {
+    .landppt-app .gallery-page .gallery-header { gap: 16px; margin-bottom: 20px; }
+    .landppt-app .gallery-page .gallery-header h2 { font-size: 22px; }
+    .landppt-app .gallery-page .gallery-header-actions { width: 100%; }
+    .landppt-app .gallery-page .gallery-header-actions .btn { flex: 1 1 auto; }
+    .landppt-app .gallery-page .gallery-header-actions #upload-trigger { flex-basis: 100%; }
+    .landppt-app .gallery-page .gallery-controls { gap: 8px; padding: 10px; }
+    .landppt-app .gallery-page .gallery-search { order: -1; flex-basis: 100%; max-width: none; }
+    .landppt-app .gallery-page .gallery-controls select { flex: 1 1 100px; width: auto; min-width: 0; }
+    .landppt-app .gallery-page .image-grid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+    .landppt-app .gallery-page .gallery-action { min-height: 44px; }
+    .landppt-app .gallery-page .gallery-action[data-action=delete] { flex-basis: 44px; width: 44px; }
+    .landppt-app .gallery-page .batch-actions { width: 100%; }
+    .landppt-app .gallery-page .batch-actions .btn { flex: 1 1 100px; }
+}

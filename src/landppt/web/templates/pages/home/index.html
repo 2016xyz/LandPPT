@@ -11,7 +11,7 @@
         border: 1px solid rgba(17, 17, 17, 0.08);
         border-radius: var(--border-radius-xl);
         padding: var(--spacing-xl);
-        box-shadow: 0 22px 48px rgba(15, 23, 42, 0.1);
+        box-shadow: none;
     }
 
     .hero-section h2 {
@@ -29,6 +29,9 @@
 
     .provider-badge {
         display: inline-flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        max-width: 100%;
         align-items: center;
         gap: var(--spacing-sm);
         background: rgba(17, 17, 17, 0.05);
@@ -40,7 +43,8 @@
     }
 
     .provider-badge span {
-        display: inline-flex;
+        display: block;
+        overflow-wrap: anywhere;
         align-items: center;
         gap: var(--spacing-xs);
     }
@@ -69,7 +73,7 @@
         background: rgba(255, 255, 255, 0.9);
         border-radius: var(--border-radius-lg);
         border: 1px solid rgba(17, 17, 17, 0.08);
-        box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+        box-shadow: none;
     }
 
     .info-panel h4 {

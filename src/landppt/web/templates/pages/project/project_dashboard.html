@@ -669,8 +669,8 @@
         <p>管理您的 PPT 项目，跟踪进度</p>
     </div>
     <div class="action-buttons">
-        <a href="/scenarios" class="project-action-btn primary" aria-label="创建新项目" data-tooltip="创建新项目">
-            <i class="fas fa-plus"></i>
+        <a href="/scenarios" class="btn btn-primary">
+            <i class="fas fa-plus" aria-hidden="true"></i>创建项目
         </a>
         <a href="/projects" class="project-action-btn secondary" aria-label="所有项目" data-tooltip="所有项目">
             <i class="fas fa-list"></i>
@@ -867,10 +867,10 @@
         <h3 style="color: var(--text-primary); margin-bottom: 8px; font-size: 1.05rem; font-weight: 700;">重命名项目</h3>
         <p style="color: var(--text-secondary); margin-bottom: 14px; font-size: 0.875rem;">请输入新的项目名称，保存后会同步到项目列表和仪表板。</p>
         <input id="renameProjectTitle" class="modal-input" type="text" maxlength="255" autocomplete="off" aria-label="项目名称">
-        <div id="renameProjectError" class="modal-error"></div>
+        <div id="renameProjectError" class="modal-error" role="alert"></div>
         <div class="modal-actions" style="margin-top: 16px;">
-            <button onclick="closeRenameModal()" class="project-action-btn secondary" aria-label="取消" data-tooltip="取消"><i class="fas fa-times"></i></button>
-            <button onclick="executeRenameProject()" class="project-action-btn primary" aria-label="保存" data-tooltip="保存"><i class="fas fa-check"></i></button>
+            <button onclick="closeRenameModal()" class="btn">取消</button>
+            <button onclick="executeRenameProject()" class="btn btn-primary">保存</button>
         </div>
     </div>
 </div>
@@ -878,7 +878,7 @@
 <div id="loadingOverlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(4px); z-index: 1001; align-items: center; justify-content: center; padding: 24px;">
     <div class="modal-surface" style="max-width: 360px;">
         <div class="spinner" style="margin-bottom: 16px;"></div>
-        <p id="loadingOverlayMessage" style="color: var(--text-primary); font-weight: 600; font-size: 0.875rem; text-align: center;">正在处理...</p>
+        <p id="loadingOverlayMessage" role="status" aria-live="polite" style="color: var(--text-primary); font-weight: 600; font-size: 0.875rem; text-align: center;">正在处理...</p>
     </div>
 </div>
 {% endblock %}
@@ -893,12 +893,12 @@ function confirmDeleteProject(projectId, projectTitle) {
     const titleElement = document.getElementById('deleteProjectTitle');
     if (titleElement) titleElement.textContent = projectTitle;
     const modalElement = document.getElementById('deleteModal');
-    if (modalElement) modalElement.style.display = 'flex';
+    LandPPTUI.openModal(modalElement);
 }
 
 function closeDeleteModal() {
     const modalElement = document.getElementById('deleteModal');
-    if (modalElement) modalElement.style.display = 'none';
+    LandPPTUI.closeModal(modalElement);
     currentDeleteProjectId = null;
 }
 
@@ -909,7 +909,7 @@ function openRenameModal(projectId, projectTitle) {
     if (input) input.value = projectTitle || '';
     if (error) error.textContent = '';
     const modalElement = document.getElementById('renameModal');
-    if (modalElement) modalElement.style.display = 'flex';
+    LandPPTUI.openModal(modalElement, input);
     setTimeout(() => {
         input?.focus();
         input?.select();
@@ -918,7 +918,7 @@ function openRenameModal(projectId, projectTitle) {
 
 function closeRenameModal() {
     const modalElement = document.getElementById('renameModal');
-    if (modalElement) modalElement.style.display = 'none';
+    LandPPTUI.closeModal(modalElement);
     currentRenameProjectId = null;
 }
 
@@ -926,7 +926,8 @@ function setLoadingOverlay(visible, message = '正在处理...') {
     const overlay = document.getElementById('loadingOverlay');
     const messageElement = document.getElementById('loadingOverlayMessage');
     if (messageElement) messageElement.textContent = message;
-    if (overlay) overlay.style.display = visible ? 'flex' : 'none';
+    if (visible) LandPPTUI.openModal(overlay);
+    else LandPPTUI.closeModal(overlay);
 }
 
 async function executeRenameProject() {
@@ -990,7 +991,7 @@ async function duplicateProject(projectId) {
 async function executeDeleteProject() {
     if (!currentDeleteProjectId) return;
 
-    document.getElementById('deleteModal').style.display = 'none';
+    LandPPTUI.closeModal(document.getElementById('deleteModal'));
     setLoadingOverlay(true, '正在删除项目...');
 
     try {
@@ -1013,22 +1014,7 @@ async function executeDeleteProject() {
 }
 
 function showNotification(message, type = 'info') {
-    const notification = document.createElement('div');
-    const colors = { success: '#16a34a', error: '#dc2626', info: '#2563eb' };
-    notification.style.cssText = `
-        position: fixed; top: 72px; right: 24px; padding: 12px 20px;
-        border-radius: 10px; color: white; z-index: 2000; max-width: 400px;
-        box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); font-weight: 600; font-size: 0.875rem;
-        transform: translateX(100%); transition: transform 0.3s ease;
-        background: ${colors[type] || colors.info};
-    `;
-    notification.textContent = message;
-    document.body.appendChild(notification);
-    setTimeout(() => notification.style.transform = 'translateX(0)', 50);
-    setTimeout(() => {
-        notification.style.transform = 'translateX(100%)';
-        setTimeout(() => notification.remove(), 300);
-    }, 3000);
+    Notify.toast(message, {type});
 }
 
 document.addEventListener('DOMContentLoaded', function() {

@@ -67,6 +67,8 @@ body { background: #f0f1f3; }
     .workspace-action-tools { margin-left: 0; }
 }
 @media (max-width: 700px) {
+    .landppt-editor .workspace-sidebar-toggle, .landppt-editor .workspace-back,
+    .landppt-editor .editor-toolbar .toolbar-btn { min-height: 44px; }
     .editor-container { margin: 0; height: 100vh; height: 100dvh; border: 0; border-radius: 0; }
     .workspace-header { padding: 8px 10px; gap: 9px; }
     .workspace-sidebar-toggle span, .workspace-back span { display: none; }
