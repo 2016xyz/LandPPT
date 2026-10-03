@@ -10,15 +10,15 @@
     <link rel="stylesheet" href="/static/css/shared/notify.css">
     <link rel="stylesheet" href="/static/css/shared/unattended_monitor.css">
     <script src="/static/js/shared/notify.js?v=20260726"></script>
-    <script src="/static/js/shared/unattended_monitor.js?v=20260727"></script>
+    <script src="/static/js/shared/unattended_monitor.js?v=20261003-compact"></script>
     <!-- CodeMirror CSS -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/dracula.min.css">
     <style>
 {% include "components/project/todo_board_with_editor/style_1.html" %}
     </style>
-    <link rel="stylesheet" href="/static/css/generator-workspace.css?v=20260929-compact">
-    <link rel="stylesheet" href="/static/css/shared/ui.css?v=20261002-system">
+    <link rel="stylesheet" href="/static/css/shared/ui.css?v=20261003-black">
+    <link rel="stylesheet" href="/static/css/generator-workspace.css?v=20261003-compact">
 </head>
 
 <body class="landppt-generator">
@@ -43,6 +43,7 @@
             container: 'unattendedMonitor',
             projectId: {{ project.project_id | tojson }},
             initiallyActive: {{ 'true' if unattended_active else 'false' }},
+            compact: true,
             // Reload on every terminal status so the workspace regains its own
             // controls; give failures long enough for the toast to be read first.
             onComplete: (run) => setTimeout(

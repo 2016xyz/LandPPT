@@ -1183,3 +1183,219 @@ def test_gallery_delete_still_requires_confirmation_and_cancel_does_not_write(
     dialog.get_by_role("button", name="取消").click()
     assert page.locator(".image-item").count() == 3
     assert all(method == "GET" for method, _ in requests)
+
+
+@pytest.fixture
+def generator_page(ui_page):
+    page, load = ui_page
+    # The isolated UI fixture blocks CDN JavaScript. This suite exercises native
+    # details and fullscreen controls, so only stub the unused wizard's Modal.
+    # The screenshot audit separately loads the real Bootstrap bundle and CSS.
+    page.add_init_script("window.bootstrap = {Modal: class {show() {} hide() {}}};")
+    page.route(
+        "**/bootstrap@5.1.3/dist/css/bootstrap.min.css",
+        lambda route: route.fulfill(
+            body="*,::before,::after{box-sizing:border-box}"
+            ".d-flex{display:flex!important}.align-items-center{align-items:center!important}"
+            ".modal{display:none;position:fixed;inset:0}",
+            content_type="text/css",
+        ),
+    )
+    requests = []
+    errors = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    original = '<html><body style="margin:0;width:1280px;height:720px;background:#eee7d4">Original presentation</body></html>'
+    titles = ["研发设计工具与核心工作流程" * 8, "核心操作", "下一阶段计划"]
+    run_state = {"run": None}
+
+    def status(route):
+        requests.append(route.request.method)
+        route.fulfill(body=json.dumps(run_state), content_type="application/json")
+
+    page.route("**/unattended/status", status)
+
+    def open_workspace(task_status="completed"):
+        run_state["run"] = (
+            None
+            if task_status == "idle"
+            else dict(
+                task_status=task_status,
+                status=task_status,
+                topic="研发与设计协作" * 12,
+                overall_progress=42 if task_status == "running" else 100,
+                stages=[
+                    dict(
+                        id="outline",
+                        name="生成大纲",
+                        status="completed",
+                        message="内容已保存",
+                    ),
+                    dict(
+                        id="ppt",
+                        name="生成幻灯片",
+                        status=task_status,
+                        message="正在生成第2页",
+                        error="设计服务暂时不可用" if task_status == "failed" else None,
+                    ),
+                ],
+                error="设计服务暂时不可用" if task_status == "failed" else None,
+                download_url=(
+                    "/downloads/example.mp4" if task_status == "completed" else None
+                ),
+            )
+        )
+        project = dict(
+            project_id="ui-generator",
+            title="生成工作区长项目名称" * 8,
+            topic="研发与设计协作",
+            status="draft" if task_status == "idle" else "completed",
+            project_metadata={},
+            outline=dict(slides=[dict(title=title) for title in titles]),
+            slides_data=(
+                []
+                if task_status == "idle"
+                else [
+                    dict(
+                        page_number=i + 1,
+                        title=title,
+                        render_mode="html",
+                        html_content=original,
+                    )
+                    for i, title in enumerate(titles)
+                ]
+            ),
+        )
+        load(
+            "pages/project/todo_board_with_editor.html",
+            path="/projects/ui-generator/todo-editor",
+            project=project,
+            todo_board=dict(task_id=project["project_id"], title=project["title"]),
+            unattended_active=task_status == "running",
+        )
+        page.wait_for_timeout(650)
+
+    return page, open_workspace, run_state, original, titles, requests, errors
+
+
+@pytest.mark.parametrize(
+    "width,height",
+    [
+        (1910, 915),
+        (1440, 900),
+        (1024, 768),
+        (720, 450),
+        (390, 844),
+        (320, 568),
+        (844, 390),
+    ],
+)
+def test_generator_completed_workspace_fits_and_preserves_preview_content(
+    generator_page, width, height
+):
+    page, open_workspace, _, original, titles, requests, errors = generator_page
+    page.set_viewport_size(dict(width=width, height=height))
+    open_workspace()
+    assert not errors
+    assert page.evaluate("document.documentElement.scrollWidth") <= width
+    assert page.locator("#connectionStatus").inner_text() == "生成完成"
+    assert not page.locator(".lu-monitor-details").evaluate("e => e.open")
+    assert not page.locator("#generationProgress").is_visible()
+    assert page.locator("#unattendedMonitor").evaluate(
+        "e => e.scrollHeight <= e.clientHeight + 1"
+    )
+    assert page.locator("#unattendedMonitor").bounding_box()["height"] < (
+        200 if width <= 600 else 140
+    )
+    if width > 600 and height > 600:
+        assert page.evaluate("document.documentElement.scrollHeight") <= height
+        box = page.locator(".slide-preview").first.bounding_box()
+        assert box["y"] + box["height"] < height
+    else:
+        assert (
+            page.locator("#slidesContainer").evaluate(
+                "e => getComputedStyle(e).overflowY"
+            )
+            == "visible"
+        )
+    headers = [
+        header.bounding_box()["height"]
+        for header in page.locator(".slide-header").all()
+    ]
+    assert max(headers) == min(headers)
+    for index, frame in enumerate(page.locator(".slide-preview iframe").all()):
+        preview = frame.locator("..").bounding_box()
+        box = frame.bounding_box()
+        assert abs(box["width"] - preview["width"]) < 1.5
+        assert abs(box["height"] - preview["height"]) < 1.5
+        assert frame.get_attribute("srcdoc") == original
+        title = page.locator(".slide-title").nth(index)
+        assert title.inner_text() == title.get_attribute("title") == titles[index]
+    for button in page.locator(".fullscreen-btn").all():
+        box = button.bounding_box()
+        assert box["height"] >= (44 if width <= 600 else 36)
+        assert button.evaluate("e => e.getBoundingClientRect().right <= innerWidth")
+    page.locator(".fullscreen-btn").first.click()
+    assert page.locator("#fullscreenIframe").get_attribute("srcdoc") == original
+    page.keyboard.press("Escape")
+    assert not page.locator("#fullscreenOverlay").is_visible()
+    assert requests and all(method == "GET" for method in requests)
+
+
+@pytest.mark.parametrize("task_status", ["completed", "running", "failed", "idle"])
+def test_generator_monitor_keeps_status_errors_and_details_reachable(
+    generator_page, task_status
+):
+    page, open_workspace, run_state, _, _, requests, errors = generator_page
+    page.set_viewport_size(dict(width=390, height=844))
+    open_workspace(task_status)
+    assert not errors
+    if task_status == "idle":
+        assert not page.locator("#unattendedMonitor").is_visible()
+        assert page.locator("#startBtn").is_visible()
+        return
+    details = page.locator(".lu-monitor-details")
+    assert details.evaluate("e => e.open") == (task_status == "failed")
+    if task_status == "failed":
+        assert page.locator(".lu-monitor-error").is_visible()
+        assert page.locator(".lu-monitor-stage-msg.is-error").is_visible()
+        details.locator("summary").click()
+        assert page.locator(".lu-monitor-error").is_visible()
+    elif task_status == "running":
+        assert page.locator('[data-lu-action="cancel"]').is_visible()
+        assert "正在生成幻灯片" in page.locator(".lu-monitor-topic").inner_text()
+    page.evaluate(
+        """run => {
+            window.regressionMonitor = UnattendedMonitor.mount({container:'unattendedMonitor',projectId:'ui-generator',compact:true});
+            regressionMonitor.destroy(); regressionMonitor.render(run);
+        }""",
+        run_state["run"],
+    )
+    summary = details.locator("summary")
+    summary.focus()
+    page.keyboard.press("Enter")
+    assert details.evaluate("e => e.open")
+    page.evaluate(
+        "run => regressionMonitor.render(run)",
+        run_state["run"],
+    )
+    assert details.evaluate("e => e.open")
+    assert summary.evaluate("e => e === document.activeElement")
+    page.locator(".lu-monitor-details summary").focus()
+    page.keyboard.press("Enter")
+    assert not details.evaluate("e => e.open")
+    assert all(method == "GET" for method in requests)
+
+
+def test_generator_resizing_keeps_frame_inside_actual_card_width(generator_page):
+    page, open_workspace, _, original, _, _, errors = generator_page
+    open_workspace()
+    for width, height in [(1024, 768), (390, 844), (844, 390), (1440, 900)]:
+        page.set_viewport_size(dict(width=width, height=height))
+        page.wait_for_timeout(80)
+        for frame in page.locator(".slide-preview iframe").all():
+            preview = frame.locator("..").bounding_box()
+            box = frame.bounding_box()
+            assert abs(preview["width"] - box["width"]) < 1.5
+            assert abs(preview["height"] - box["height"]) < 1.5
+            assert frame.get_attribute("srcdoc") == original
+    assert not errors

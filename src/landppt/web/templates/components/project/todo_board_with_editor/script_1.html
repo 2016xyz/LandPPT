@@ -1540,6 +1540,10 @@
 
             const statusDiv = document.getElementById('generationStatus');
             statusDiv.className = 'status-indicator';
+            statusDiv.dataset.state = type;
+            const progressBar = document.getElementById('generationProgress');
+            progressBar.classList.toggle('progress-bar-animated', type === 'progress');
+            progressBar.classList.toggle('progress-bar-striped', type === 'progress');
 
             if (type === 'error') {
                 statusDiv.style.borderLeftColor = 'var(--surface-contrast)';
@@ -1683,7 +1687,7 @@
 
             slideCard.innerHTML = `
                 <div class="slide-header">
-                    <h6><i class="fas fa-file-alt"></i> ${slideData.title}</h6>
+                    <h6><i class="fas fa-file-alt" aria-hidden="true"></i><span class="slide-title"></span></h6>
                     <div class="slide-actions">
                         <span class="badge">第${slideData.page_number}页</span>
                         ${slideData.generation_failed ? '<span class="badge" role="status" title="设计生成未完成，请重新生成此页">待重新生成</span>' : ''}
@@ -1699,6 +1703,9 @@
                             onload="adjustIframeHeight(this)"></iframe>
                 </div>
             `;
+            const title = slideCard.querySelector('.slide-title');
+            title.textContent = slideData.title || '未命名页面';
+            title.title = title.textContent;
 
             // 添加全屏按钮事件监听器
             const fullscreenBtn = slideCard.querySelector('.fullscreen-btn');
@@ -1723,6 +1730,7 @@
                 // 插入到找到的位置之前
                 slidesContainer.insertBefore(slideCard, allSlides[insertIndex]);
             }
+            updateSlidePreviewScales();
 
             // Animate to completed state
             setTimeout(() => {
@@ -1772,6 +1780,15 @@
             window.open('/projects/{{ todo_board.task_id }}/fullscreen', '_blank');
         }
 
+        // Measure the preview box rather than the viewport: card widths change
+        // with the grid, scrollbar, and window size. Presentation HTML stays intact.
+        function updateSlidePreviewScales() {
+            document.querySelectorAll('#slidesContainer .slide-preview iframe').forEach(iframe => {
+                const width = iframe.parentElement.clientWidth;
+                iframe.style.transform = `scale(${width / 1280})`;
+            });
+        }
+
         // 优化的iframe加载完成处理函数
         function adjustIframeHeight(iframe) {
             try {
@@ -1781,6 +1798,7 @@
                 if (!slidePreview || !slideCard) return;
 
                 slidePreview.classList.remove('loading');
+                updateSlidePreviewScales();
 
                 setTimeout(() => {
                     if (slideCard.classList.contains('generating')) {
@@ -1893,6 +1911,8 @@
             const editorBtn = document.getElementById('editorBtn');
             const slideshowBtn = document.getElementById('slideshowBtn');
             const closeFullscreenBtn = document.getElementById('closeFullscreenBtn');
+            const previewResizeObserver = new ResizeObserver(updateSlidePreviewScales);
+            previewResizeObserver.observe(document.getElementById('slidesContainer'));
 
             if (startBtn) {
                 startBtn.addEventListener('click', startGeneration);
@@ -2049,6 +2069,7 @@
             // Show status as completed
             statusDiv.style.display = 'block';
             updateStatus('PPT已生成完成', 'complete');
+            updateConnectionStatus('completed', '生成完成');
             const progressBar = document.getElementById('generationProgress');
             progressBar.style.width = '100%';
             currentlyGeneratingPages.clear();

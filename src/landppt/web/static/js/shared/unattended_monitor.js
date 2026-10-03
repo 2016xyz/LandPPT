@@ -56,6 +56,7 @@
     function Monitor(options) {
         this.container = resolveElement(options.container);
         this.projectId = options.projectId;
+        this.compact = Boolean(options.compact);
         this.onComplete = typeof options.onComplete === 'function' ? options.onComplete : null;
         // Fired on every poll so the host page can react to stage transitions
         // (e.g. render the outline the moment the outline stage finishes).
@@ -141,6 +142,10 @@
         var status = run.status || run.task_status || 'running';
         var badgeClass = TERMINAL[run.task_status] ? run.task_status : 'running';
         var progress = Math.max(0, Math.min(100, Number(run.overall_progress) || 0));
+        // Preserve the user's disclosure choice across polling renders.
+        var previousDetails = this.container.querySelector('.lu-monitor-details');
+        var detailsOpen = previousDetails ? previousDetails.open : run.task_status === 'failed';
+        var detailsFocused = previousDetails && previousDetails.querySelector('summary') === document.activeElement;
 
         var allStages = run.stages || [];
         // Stages the user did not select are noise: with the default stop_after
@@ -181,13 +186,22 @@
             : (currentStage
                 ? '正在' + (currentStage.name || '') + ' · 第 ' + (doneCount + 1) + '/' + plannedStages.length + ' 步'
                 : (run.topic || ''));
+        var stageDetails = '<ul class="lu-monitor-stages">' + stagesHtml + '</ul>' +
+            (skippedCount
+                ? '<div class="lu-monitor-skipped">另有 ' + skippedCount + ' 个阶段未选择，不会执行</div>'
+                : '');
+        if (this.compact) {
+            stageDetails = '<details class="lu-monitor-details"' + (detailsOpen ? ' open' : '') + '>' +
+                '<summary>阶段详情 · ' + doneCount + '/' + plannedStages.length + ' 已完成</summary>' +
+                stageDetails + '</details>';
+        }
 
         this.container.hidden = false;
         this.container.innerHTML = '' +
             '<div class="lu-monitor-head">' +
-            '<div>' +
+            '<div class="lu-monitor-heading">' +
             '<h3 class="lu-monitor-title"><i class="fas fa-robot"></i> 无人值守任务</h3>' +
-            (subtitle ? '<div class="lu-monitor-topic">' + escapeHtml(subtitle) + '</div>' : '') +
+            (subtitle ? '<div class="lu-monitor-topic" title="' + escapeHtml(subtitle) + '">' + escapeHtml(subtitle) + '</div>' : '') +
             '</div>' +
             '<span class="lu-monitor-badge lu-monitor-badge--' + escapeHtml(badgeClass) + '">' +
             escapeHtml(STATUS_TEXT[status] || status) + '</span>' +
@@ -197,15 +211,16 @@
             (TERMINAL[run.task_status] ? ' is-' + escapeHtml(run.task_status) : '') +
             '" style="width:' + progress + '%"></div></div>' +
             '<div class="lu-monitor-meta">总进度 ' + progress.toFixed(0) + '%</div>' +
-            '<ul class="lu-monitor-stages">' + stagesHtml + '</ul>' +
-            (skippedCount
-                ? '<div class="lu-monitor-skipped">另有 ' + skippedCount + ' 个阶段未选择，不会执行</div>'
-                : '') +
+            stageDetails +
             // A cancel carries an `error` string too; showing it in a red error box
             // would read as a failure the user did not cause.
             (run.error && run.task_status !== 'cancelled'
                 ? '<div class="lu-monitor-error">' + escapeHtml(run.error) + '</div>'
                 : '');
+
+        if (this.compact && detailsFocused) {
+            this.container.querySelector('.lu-monitor-details summary').focus({ preventScroll: true });
+        }
 
         var cancelBtn = this.container.querySelector('[data-lu-action="cancel"]');
         if (cancelBtn) {

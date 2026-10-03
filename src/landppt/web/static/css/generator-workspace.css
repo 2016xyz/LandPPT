@@ -1,10 +1,16 @@
 /* Compact controls leave the viewport to the slide workspace. */
+body.landppt-generator {
+    margin: 0;
+    padding: 12px;
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+}
 .generator-workspace.main-container {
     display: flex;
     flex-direction: column;
-    height: calc(100vh - 24px);
-    height: calc(100dvh - 24px);
-    margin: 12px;
+    height: 100%;
+    margin: 0;
     border-radius: 16px;
     box-shadow: 0 8px 30px rgb(15 23 42 / 5%);
 }
@@ -15,7 +21,7 @@
     box-shadow: none;
 }
 .generator-workspace .header-content { gap: 16px; }
-.generator-workspace .header-left { min-width: 0; gap: 12px; }
+.generator-workspace .header-left { flex: 1; min-width: 0; gap: 12px; }
 .generator-workspace .header-text { min-width: 0; gap: 3px; }
 .generator-workspace .header h2 { font-size: 1.1rem; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .generator-workspace .header-subtitle { font-size: .72rem; line-height: 1.2; }
@@ -42,10 +48,38 @@
 .generator-workspace .connection-status-container { margin: 0; flex-shrink: 0; }
 .generator-workspace .connection-status { padding: 3px 8px; font-size: .72rem; }
 .generator-workspace #generationStatus .progress { height: 4px; box-shadow: none; }
-.generator-workspace #slidesContainer { min-height: 0; max-height: none; grid-auto-rows: max-content; align-items: start; padding: 20px; gap: 20px; overscroll-behavior: contain; scrollbar-gutter: stable; }
-.generator-workspace .slide-header { min-height: 48px; padding: 10px 16px; }
-.generator-workspace .slide-card { box-shadow: 0 3px 12px rgb(15 23 42 / 5%); }
-.generator-workspace #unattendedMonitor:not([hidden]) { flex-shrink: 0; max-height: 25vh; overflow: auto; }
+.generator-workspace #generationStatus[data-state="complete"] .progress { display: none; }
+.generator-workspace #slidesContainer { min-height: 0; max-height: none; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); grid-auto-rows: max-content; align-items: start; padding: 20px; gap: 16px; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.generator-workspace .slide-card { width: 100%; min-width: 0; max-width: 100%; border-radius: 10px; box-shadow: var(--ui-shadow); backdrop-filter: none; transition: border-color .15s; }
+.generator-workspace .slide-card.completed { border-color: var(--ui-border); }
+.generator-workspace .slide-card:hover { transform: none; box-shadow: var(--ui-shadow); border-color: var(--ui-accent-border); }
+.generator-workspace .slide-header { height: 52px; min-height: 52px; padding: 8px 12px; flex-direction: row; gap: 10px; backdrop-filter: none; }
+.generator-workspace .slide-header h6 { flex: 1; min-width: 0; font-size: 14px; gap: 8px; text-shadow: none; }
+.generator-workspace .slide-header h6 i { flex-shrink: 0; font-size: 14px; }
+.generator-workspace .slide-title { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.generator-workspace .slide-actions { flex-shrink: 0; gap: 6px; align-self: center; }
+.generator-workspace .slide-actions .badge { padding: 4px 7px; letter-spacing: 0; }
+.generator-workspace .fullscreen-btn { justify-content: center; width: 36px; height: 36px; padding: 0; background: var(--ui-paper); color: var(--ui-ink); border: 1px solid var(--ui-border); box-shadow: none; }
+.generator-workspace .fullscreen-btn:hover { transform: none; background: var(--ui-accent-soft); box-shadow: none; }
+.generator-workspace .slide-preview { height: auto; max-height: none; aspect-ratio: 16 / 9; border-radius: 0; box-shadow: none; transition: none; }
+.generator-workspace .slide-preview:hover { box-shadow: none; }
+.generator-workspace .welcome-message { padding: 32px 16px; border-color: var(--ui-border); }
+.generator-workspace #unattendedMonitor:not([hidden]) { flex-shrink: 0; max-height: none; overflow: visible; padding: 10px 20px; margin: 0; border: 0; border-bottom: 1px solid var(--ui-border); border-radius: 0; box-shadow: none; }
+.generator-workspace .lu-monitor-head { gap: 8px 12px; flex-wrap: nowrap; }
+.generator-workspace .lu-monitor-heading { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 12px; }
+.generator-workspace .lu-monitor-title { font-size: 14px; flex-shrink: 0; gap: 8px; }
+.generator-workspace .lu-monitor-topic { min-width: 0; font-size: 12px; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.generator-workspace .lu-monitor-actions { margin: 0; flex-shrink: 0; }
+.generator-workspace .lu-monitor-btn { min-height: 36px; padding: 6px 10px; font-size: 13px; border-radius: 8px; transition: none; }
+.generator-workspace .lu-monitor-btn:hover { transform: none; box-shadow: none; }
+.generator-workspace .lu-monitor-bar { height: 4px; margin: 8px 0 4px; }
+.generator-workspace .lu-monitor-details > summary { display: flex; align-items: center; gap: 8px; min-height: 32px; width: fit-content; cursor: pointer; color: var(--ui-muted); font-size: 12px; list-style: none; }
+.generator-workspace .lu-monitor-details > summary::-webkit-details-marker { display: none; }
+.generator-workspace .lu-monitor-details > summary::before { content: "›"; font-size: 18px; line-height: 1; }
+.generator-workspace .lu-monitor-details[open] > summary::before { transform: rotate(90deg); }
+.generator-workspace .lu-monitor-stages { margin: 4px 0 8px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 8px; font-size: 13px; }
+.generator-workspace .lu-monitor-stage { border-radius: 8px; padding: 6px 8px; }
+.generator-workspace .lu-monitor-error { margin: 8px 0 0; padding: 6px 10px; }
 .generator-workspace :is(.generator-back, .generator-settings summary):focus-visible { outline: 2px solid var(--text-primary); outline-offset: 3px; }
 @media (max-width: 900px) {
     .generator-workspace .header-content { flex-direction: column; align-items: stretch; gap: 10px; }
@@ -53,7 +87,8 @@
     .generator-workspace .generation-mode-entry p { display: none; }
 }
 @media (max-width: 600px) {
-    .generator-workspace.main-container { margin: 6px; height: calc(100vh - 12px); height: calc(100dvh - 12px); border-radius: 12px; }
+    body.landppt-generator { padding: 6px; }
+    .generator-workspace.main-container { border-radius: 12px; }
     .generator-workspace .header { padding: 10px 12px; }
     .generator-workspace .header h2 { font-size: 1rem; }
     .generator-workspace .generator-actions { padding-left: 0; }
@@ -64,8 +99,21 @@
     .generator-workspace #statusMessage { grid-column: 1 / -1; grid-row: 2; }
     .generator-workspace .connection-status-container { grid-column: 2; grid-row: 1; }
     .generator-workspace #slidesContainer { padding: 12px; gap: 14px; }
+    .landppt-generator .generator-workspace :is(.generator-back, .generator-settings summary, .generator-actions .btn, .fullscreen-btn, .lu-monitor-btn, .lu-monitor-details > summary) { min-height: 44px; }
+    .generator-workspace .fullscreen-btn { width: 44px; }
+    .generator-workspace .slide-header { height: 60px; min-height: 60px; }
+    .generator-workspace #unattendedMonitor:not([hidden]) { padding: 10px 12px; }
+    .generator-workspace .lu-monitor-head { flex-wrap: wrap; }
+    .generator-workspace .lu-monitor-heading { flex-basis: calc(100% - 80px); display: block; }
+    .generator-workspace .lu-monitor-actions { width: auto; }
 }
-@media (max-height: 500px) {
+/* A single document scroll keeps expanded details and previews reachable on
+   phones and short windows; desktop reserves scrolling for the preview list. */
+@media (max-width: 600px), (max-height: 600px) {
+    body.landppt-generator { height: auto; min-height: 100vh; min-height: 100dvh; }
     .generator-workspace.main-container { height: auto; min-height: calc(100dvh - 24px); }
-    .generator-workspace #slidesContainer { overflow-y: visible; }
+    .generator-workspace #slidesContainer { flex: none; overflow: visible; scrollbar-gutter: auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .generator-workspace .slide-card { animation: none; }
 }
