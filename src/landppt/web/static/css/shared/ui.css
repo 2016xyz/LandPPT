@@ -8,9 +8,11 @@
     --ui-dialog-shadow: 0 16px 48px rgb(15 23 42 / 16%);
     --ui-ink: #252936;
     --ui-muted: #6b7280;
-    --ui-accent: #5263cc;
-    --ui-accent-strong: #4453b2;
-    --ui-accent-soft: #eef0fb;
+    --ui-accent: #111111;
+    --ui-accent-strong: #292929;
+    --ui-accent-soft: #f2f2f2;
+    --ui-accent-border: #dedede;
+    --ui-accent-ring: rgb(17 17 17 / 12%);
     --ui-canvas: #f5f5f7;
     --ui-paper: #fff;
     --ui-subtle: #f6f7f9;
@@ -169,7 +171,7 @@
     --accent: var(--ui-accent);
     --accent-light: var(--ui-accent-strong);
     --accent-bg: var(--ui-accent-soft);
-    --accent-border: #d8ddf5;
+    --accent-border: var(--ui-accent-border);
     --surface-subtle: var(--ui-canvas);
     --surface-contrast: var(--ui-accent);
     --paper-2: var(--ui-subtle);
@@ -264,7 +266,7 @@
 .landppt-app .ai-config-page .hero-eyebrow { font-size: 13px; letter-spacing: 0; }
 .landppt-app .ai-config-page .config-tabs { gap: 4px !important; margin-bottom: 24px; padding-bottom: 12px; }
 .landppt-app .ai-config-page .tab-btn { padding: 9px 14px; min-height: 40px; border-radius: 8px; background-image: none; line-height: 20px; }
-.landppt-app .ai-config-page .tab-btn.active { background: var(--ui-accent-soft); border-color: #d8ddf5; color: var(--ui-accent-strong); }
+.landppt-app .ai-config-page .tab-btn.active { background: var(--ui-accent-soft); border-color: var(--ui-accent-border); color: var(--ui-accent-strong); }
 .landppt-app .ai-config-page .tab-content h3 { text-align: left !important; font-size: 18px; margin-bottom: 16px !important; }
 .landppt-app .ai-config-page .provider-content { background: var(--ui-subtle) !important; }
 .landppt-app .ai-config-page .provider-header { gap: 12px; }
@@ -351,7 +353,7 @@
 .auth-body .control:focus-within { transform: none; box-shadow: 0 0 0 3px rgb(17 24 39 / 6%); }
 .auth-body .control input { border: 0 !important; padding: 0 !important; background: transparent; }
 .auth-body .auth-tabs__indicator { background: var(--ui-accent); border-color: var(--ui-accent); }
-.landppt-editor .workspace-view-tools .toolbar-btn.active { background: var(--ui-accent-soft); border-color: #d8ddf5; color: var(--ui-accent-strong); }
+.landppt-editor .workspace-view-tools .toolbar-btn.active { background: var(--ui-accent-soft); border-color: var(--ui-accent-border); color: var(--ui-accent-strong); }
 .landppt-app :is(.package-panel, .package-dialog) button.primary { background: var(--ui-accent); border-color: var(--ui-accent); }
 .landppt-app :is(.package-panel, .package-dialog) input[type=checkbox],
 .landppt-app :is(.package-progress, .pptx-activity) { accent-color: var(--ui-accent); }

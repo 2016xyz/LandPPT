@@ -254,6 +254,153 @@ def test_dashboard_summary_keeps_projects_near_top_without_overflow(
         )
 
 
+@pytest.fixture
+def detail_project():
+    return dict(
+        project_id="ui-detail",
+        title="项目工作区体验优化与下一阶段计划",
+        topic="产品体验、协作流程与交付质量",
+        scenario="general",
+        status="completed",
+        version=3,
+        requirements="优先呈现关键进度和可执行操作。",
+        created_at=datetime(2026, 10, 2),
+        slides_html="<html><body>Original slide</body></html>",
+        outline=dict(
+            title="产品体验与交付计划",
+            slides=[
+                dict(
+                    title="项目目标与具体实施步骤" * 3,
+                    page_number=i + 1,
+                    content_points=["明确核心目标。", "跟踪结果并及时调整。"],
+                )
+                for i in range(3)
+            ],
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    "width,height", [(1440, 900), (1024, 768), (390, 844), (320, 568)]
+)
+@pytest.mark.parametrize("status", ["completed", "in_progress"])
+def test_project_detail_compact_layout_keeps_stage_and_outline_actions_reachable(
+    ui_page, detail_project, width, height, status
+):
+    page, load = ui_page
+    page.set_viewport_size({"width": width, "height": height})
+    project = {**detail_project, "status": status}
+    board = dict(
+        overall_progress=100 if status == "completed" else 69,
+        stages=[
+            dict(
+                id=stage_id,
+                name=name,
+                description="阶段说明与协作要求" * 3,
+                status="running" if status == "in_progress" and i == 4 else "completed",
+                progress=45,
+            )
+            for i, (stage_id, name) in enumerate(
+                [
+                    ("requirements_confirmation", "需求确认"),
+                    ("research", "资料研究"),
+                    ("outline_generation", "大纲生成"),
+                    ("template_selection", "模板选择"),
+                    ("ppt_creation", "PPT 生成"),
+                ]
+            )
+        ],
+    )
+    load(
+        "pages/project/project_detail.html",
+        path="/projects/ui-detail",
+        project=project,
+        todo_board=board,
+        versions=[],
+    )
+    assert page.evaluate("document.documentElement.scrollWidth") <= width
+    hero = page.locator(".project-detail-hero").bounding_box()
+    outline = page.locator(".outline-panel").bounding_box()
+    if status == "completed" and width >= 980:
+        assert outline["y"] - hero["y"] <= 550
+    elif status == "completed":
+        assert outline["y"] - hero["y"] <= 780
+    else:
+        for description in page.locator(".stage-description").all():
+            assert description.is_visible()
+            assert description.evaluate("e => e.scrollWidth <= e.clientWidth + 1")
+    disclosure = page.locator(".detail-stage-list")
+    assert disclosure.evaluate("e => e.open") == (status == "in_progress")
+    disclosure.locator("summary").focus()
+    page.keyboard.press("Enter")
+    assert disclosure.evaluate("e => e.open") == (status == "completed")
+    page.keyboard.press("Enter")
+    assert disclosure.evaluate("e => e.open") == (status == "in_progress")
+    assert page.get_by_role("link", name="预览 PPT").is_visible() == (
+        status == "completed"
+    )
+    assert page.get_by_role("link", name="查看 TODO 看板").is_visible() == (
+        status == "in_progress"
+    )
+    assert page.locator("#compactView [aria-label='上移']").first.is_disabled()
+    assert page.locator("#compactView [aria-label='下移']").last.is_disabled()
+    if width <= 600:
+        surface = page.locator(".outline-surface").bounding_box()
+        for card in page.locator("#compactView .outline-slide-card").all():
+            box = card.bounding_box()
+            assert box["x"] >= surface["x"]
+            assert box["x"] + box["width"] <= surface["x"] + surface["width"]
+        for button in page.locator("#compactView .outline-tool-btn").all():
+            box = button.bounding_box()
+            assert box["width"] >= 44 and box["height"] >= 44
+            assert button.evaluate(
+                "e => {const r=e.getBoundingClientRect();"
+                "const card=e.closest('.outline-slide-card').getBoundingClientRect();"
+                "return r.left>=card.left && r.right<=card.right}"
+            )
+    page.get_by_role("button", name="切换为详细视图").click()
+    assert page.locator("#detailView").is_visible()
+    assert not page.locator("#compactView").is_visible()
+    assert page.evaluate("document.documentElement.scrollWidth") <= width
+    page.get_by_role("button", name="切换为简洁视图").click()
+    assert page.locator("#compactView").is_visible()
+    page.locator("#compactView [aria-label='查看详情']").first.click()
+    page.locator("div.modal").wait_for(state="visible")
+    page.get_by_role("button", name="关闭", exact=True).last.click()
+    assert not page.locator("div.modal").count()
+
+
+@pytest.mark.parametrize("width", [1440, 320])
+@pytest.mark.parametrize(
+    "outline", [None, {"content": "旧格式大纲内容。" + "LONG_" * 50}]
+)
+def test_project_detail_draft_and_legacy_content_remain_bounded(
+    ui_page, detail_project, width, outline
+):
+    page, load = ui_page
+    page.set_viewport_size({"width": width, "height": 844})
+    load(
+        "pages/project/project_detail.html",
+        path="/projects/ui-detail",
+        project={**detail_project, "status": "draft", "outline": outline},
+        todo_board=None,
+        versions=[
+            dict(
+                version=2,
+                description="版本说明与修订记录" * 12,
+                timestamp=datetime(2026, 10, 2),
+            )
+        ],
+    )
+    assert page.evaluate("document.documentElement.scrollWidth") <= width
+    assert page.locator(".detail-stage-list").count() == 0
+    assert page.get_by_role("button", name="恢复此版本").is_visible()
+    if outline:
+        assert page.locator(".detail-legacy-content").inner_text() == outline["content"]
+    else:
+        assert page.locator(".outline-panel").count() == 0
+
+
 @pytest.mark.parametrize("template", ["projects_list", "project_dashboard"])
 def test_project_dialog_traps_focus_and_restores_trigger(ui_page, template):
     page, load = ui_page
@@ -501,7 +648,7 @@ def test_primary_controls_share_scale_across_app_shells(
     assert primary.evaluate("e => getComputedStyle(e).borderRadius") == "8px"
     assert (
         primary.evaluate("e => getComputedStyle(e).backgroundColor")
-        == "rgb(82, 99, 204)"
+        == "rgb(17, 17, 17)"
     )
     colors = primary.evaluate(
         "e => [getComputedStyle(e).color, getComputedStyle(e).backgroundColor]"

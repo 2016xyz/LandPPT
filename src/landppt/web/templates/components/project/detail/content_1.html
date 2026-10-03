@@ -1,16 +1,17 @@
+<div class="project-detail-page">
 <div class="project-detail-hero">
     <h2>{{ project.title }}</h2>
     <p>项目ID: <code>{{ project.project_id }}</code></p>
 </div>
 
-<div style="max-width: 1400px; margin: 0 auto; padding: var(--spacing-lg);">
+<div class="project-detail-body">
 
-    <div class="grid">
+    <div class="detail-overview{% if todo_board %} detail-overview--with-progress{% endif %}">
         <!-- Project Information -->
-        <div class="card">
+        <div class="card detail-card detail-info-card">
             <h3 class="section-heading">项目信息</h3>
 
-            <div style="margin-bottom: var(--spacing-xl);">
+            <div class="detail-status">
                 <div class="status-summary">
                     {% if project.status == 'completed' %}
                     <div class="status-indicator completed">
@@ -66,7 +67,7 @@
             </div>
 
             <div class="project-info-grid">
-                <div class="project-info-item">
+                <div class="project-info-item project-info-item--wide">
                     <strong>主题</strong>
                     <p>{{ project.topic }}</p>
                 </div>
@@ -78,17 +79,16 @@
                     <strong>版本</strong>
                     <p>v{{ project.version }}</p>
                 </div>
-                <div class="project-info-item">
+                <div class="project-info-item project-info-item--wide">
                     <strong>创建时间</strong>
                     <p>{{ project.created_at | strftime('%Y-%m-%d %H:%M') }}</p>
                 </div>
             </div>
 
             {% if project.requirements %}
-            <div class="card" style="background: var(--surface); border: 1px solid var(--glass-border);">
-                <strong
-                    style="color: var(--text-secondary); display: block; margin-bottom: var(--spacing-md); text-transform: uppercase; letter-spacing: 0.5px; font-size: 0.9rem;">特殊要求</strong>
-                <p style="color: var(--text-primary); margin: 0; line-height: 1.6; font-size: 1.05rem;">{{
+            <div class="detail-requirements">
+                <strong>特殊要求</strong>
+                <p>{{
                     project.requirements }}</p>
             </div>
             {% endif %}
@@ -124,10 +124,10 @@
 
         <!-- TODO Board Progress -->
         {% if todo_board %}
-        <div class="card">
+        <div class="card detail-card detail-progress-card">
             <h3 class="section-heading">进度概览</h3>
 
-            <div style="margin-bottom: 20px;">
+            <div class="detail-progress">
                 <div class="progress-track">
                     <div class="progress-fill" style="width: {{ todo_board.overall_progress }}%"></div>
                 </div>
@@ -136,8 +136,8 @@
                 </p>
             </div>
 
-            <div style="background: #f8f9fa; padding: 15px; border-radius: 10px;">
-                <h4 class="section-subheading">阶段状态</h4>
+            <details class="detail-stage-list"{% if project.status != 'completed' %} open{% endif %}>
+                <summary class="section-subheading">阶段状态 <span>{{ todo_board.stages|length }} 个阶段</span></summary>
                 {% for stage in todo_board.stages %}
                 <div class="stage-row">
                     <div class="stage-icon">
@@ -151,7 +151,7 @@
                         <span class="status-icon status-icon--pending"><i class="fas fa-clock"></i></span>
                         {% endif %}
                     </div>
-                    <div style="flex: 1;">
+                    <div class="stage-info">
                         <strong class="stage-title">{{ stage.name }}</strong>
                         <p class="stage-description">{{ stage.description }}</p>
                         {% if stage.status == 'running' and stage.progress is defined %}
@@ -160,16 +160,14 @@
                         </div>
                         {% endif %}
                     </div>
-                    <div style="margin-left: 15px;">
+                    <div class="stage-action">
                         {% if stage.status == 'pending' %}
                         {% if stage.id == 'requirements_confirmation' %}
-                        <a href="/projects/{{ project.project_id }}/todo" class="btn btn-primary"
-                            style="font-size: 0.8em; padding: 6px 12px;">
+                        <a href="/projects/{{ project.project_id }}/todo" class="btn btn-primary btn-sm">
                             开始
                         </a>
                         {% elif stage.id == 'outline_generation' %}
-                        <a href="/projects/{{ project.project_id }}/todo" class="btn btn-primary"
-                            style="font-size: 0.8em; padding: 6px 12px;">
+                        <a href="/projects/{{ project.project_id }}/todo" class="btn btn-primary btn-sm">
                             生成大纲
                         </a>
                         {% elif stage.id == 'ppt_creation' %}
@@ -197,7 +195,7 @@
                     </div>
                 </div>
                 {% endfor %}
-            </div>
+            </details>
         </div>
         {% endif %}
     </div>
@@ -377,21 +375,19 @@
     </section>
     {% elif project.outline and project.outline is not none %}
     <!-- Show outline content if it exists but doesn't have slides structure -->
-    <div style="margin-top: 40px;">
-        <h3 class="section-heading" style="text-align: center;">PPT 大纲</h3>
+    <div class="outline-panel">
+        <h3 class="section-heading">PPT 大纲</h3>
 
-        <div style="background: white; border-radius: 15px; padding: 30px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);">
-            <div style="text-align: center; margin-bottom: 20px;">
-                <h4 style="color: var(--text-primary); margin-bottom: 10px;">{{ project.outline.get('title',
+        <div class="outline-surface">
+            <div class="detail-legacy-summary">
+                <h4 class="outline-summary__title">{{ project.outline.get('title',
                     project.topic or '未命名大纲') if project.outline else (project.topic or '未命名大纲') }}</h4>
-                <p style="color: #7f8c8d;">大纲内容</p>
+                <p>大纲内容</p>
             </div>
 
-            <div
-                style="background: var(--surface-subtle); padding: 20px; border-radius: 8px; max-height: 400px; overflow-y: auto;">
+            <div class="detail-legacy-content">
                 {% if project.outline and project.outline.get('content') %}
-                <pre
-                    style="white-space: pre-wrap; font-family: 'Courier New', monospace; font-size: 12px; line-height: 1.4; margin: 0; color: var(--text-secondary);">{{ project.outline.get('content') }}</pre>
+                <pre>{{ project.outline.get('content') }}</pre>
                 {% else %}
                 <p style="color: var(--text-muted); text-align: center; margin: 0;">大纲内容正在生成中...</p>
                 {% endif %}
@@ -402,45 +398,44 @@
 
     <!-- Version History -->
     {% if versions %}
-    <div style="margin-top: 40px;">
-        <h3 class="section-heading" style="text-align: center;">版本历史</h3>
+    <section class="detail-versions">
+        <h3 class="section-heading">版本历史</h3>
 
-        <div style="background: white; border-radius: 15px; padding: 30px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);">
+        <div class="detail-version-list">
             {% for version in versions %}
-            <div
-                style="display: flex; align-items: center; padding: 15px; margin-bottom: 10px; background: var(--surface-subtle); border-radius: 8px;">
-                <div style="margin-right: 20px;">
-                    <div
-                        style="width: 40px; height: 40px; background: #1f2933; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold;">
+            <div class="detail-version-row">
+                <div>
+                    <div class="detail-version-number">
                         v{{ version.version }}
                     </div>
                 </div>
 
-                <div style="flex: 1;">
-                    <strong style="color: var(--text-primary);">{{ version.description }}</strong>
-                    <p style="color: var(--text-secondary); margin: 5px 0 0 0; font-size: 0.9em;">
+                <div class="detail-version-info">
+                    <strong>{{ version.description }}</strong>
+                    <p>
                         {{ version.timestamp | strftime('%Y-%m-%d %H:%M:%S') }}
                     </p>
                 </div>
 
-                <div style="margin-left: 15px;">
-                    <button onclick="restoreVersion({{ version.version }})" class="btn btn-primary"
-                        style="font-size: 0.9em;">
+                <div class="detail-version-action">
+                    <button onclick="restoreVersion({{ version.version }})" class="btn btn-secondary btn-sm">
                         恢复此版本
                     </button>
                 </div>
             </div>
             {% endfor %}
         </div>
-    </div>
+    </section>
     {% endif %}
 
     <!-- Navigation -->
-    <div style="text-align: center; margin-top: 40px;">
-        <a href="/projects" class="btn" style="background: #1f2933; color: white; margin: 0 10px;">
+    <div class="detail-navigation">
+        <a href="/projects" class="btn btn-secondary">
             返回项目列表
         </a>
-        <a href="/dashboard" class="btn btn-primary" style="margin: 0 10px;">
+        <a href="/dashboard" class="btn btn-secondary">
             项目仪表板
         </a>
     </div>
+</div>
+</div>
