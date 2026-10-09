@@ -43,7 +43,9 @@ class SpeechScriptExporter:
             raise ValueError("DOCX export not available. Please install python-docx: pip install python-docx")
         
         # Run the synchronous DOCX generation in thread pool
-        loop = asyncio.get_event_loop()
+        # get_running_loop() 正确要求调用方处于事件循环内（这些都是 async 方法），
+        # 避免 get_event_loop() 在 3.10+ 已无运行循环的线程里报错/建错循环。
+        loop = asyncio.get_running_loop()
         docx_content = await loop.run_in_executor(
             self.executor,
             self._generate_docx_sync,
@@ -63,7 +65,7 @@ class SpeechScriptExporter:
         """Export speech scripts to Markdown format"""
         
         # Run the markdown generation in thread pool
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         markdown_content = await loop.run_in_executor(
             self.executor,
             self._generate_markdown_sync,

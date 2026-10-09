@@ -65,7 +65,22 @@ check_environment() {
         info "✅ Google API key configured"
         ai_configured=true
     fi
-    
+
+    if [ -n "$DEEPSEEK_API_KEY" ]; then
+        info "✅ DeepSeek API key configured"
+        ai_configured=true
+    fi
+
+    if [ -n "$KIMI_API_KEY" ]; then
+        info "✅ Kimi API key configured"
+        ai_configured=true
+    fi
+
+    if [ -n "$MINIMAX_API_KEY" ]; then
+        info "✅ MiniMax API key configured"
+        ai_configured=true
+    fi
+
     if [ -n "$AZURE_OPENAI_API_KEY" ] && [ "$AZURE_OPENAI_API_KEY" != "your_azure_openai_key_here" ]; then
         info "✅ Azure OpenAI API key configured"
         ai_configured=true
@@ -81,6 +96,7 @@ check_environment() {
         warn "   - OPENAI_API_KEY"
         warn "   - ANTHROPIC_API_KEY"
         warn "   - GOOGLE_API_KEY"
+        warn "   - DEEPSEEK_API_KEY / KIMI_API_KEY / MINIMAX_API_KEY"
         warn "   - AZURE_OPENAI_API_KEY"
         warn "   - Or enable ENABLE_LOCAL_MODELS=true with Ollama"
     fi

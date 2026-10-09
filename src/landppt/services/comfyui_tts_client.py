@@ -13,6 +13,7 @@ import asyncio
 import copy
 import json
 import os
+import time
 import uuid
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
@@ -20,8 +21,22 @@ from typing import Any, Dict, Optional, Tuple
 import aiohttp
 
 
+def bundled_workflow_template(name: str) -> Path:
+    """Return the path of a workflow template shipped inside the package.
+
+    Docker 镜像里不含 tests/ 目录；随包分发的默认工作流放在
+    src/landppt/assets/ 下，保证容器内 ComfyUI TTS 开箱可用。
+    """
+    return Path(__file__).resolve().parent.parent / "assets" / name
+
+
 def load_workflow_template(path: str) -> Dict[str, Any]:
     p = Path(path)
+    if not p.exists():
+        # Fall back to the bundled copy for well-known default templates.
+        bundled = bundled_workflow_template(p.name)
+        if bundled.exists():
+            p = bundled
     if not p.exists():
         raise FileNotFoundError(f"ComfyUI workflow template not found: {path}")
     return json.loads(p.read_text(encoding="utf-8"))
@@ -179,12 +194,12 @@ async def wait_for_history(
     """
     Poll ComfyUI history until the prompt has outputs.
     """
-    deadline = asyncio.get_event_loop().time() + max(5, int(timeout_s))
+    deadline = time.monotonic() + max(5, int(timeout_s))
     url_one = base_url.rstrip("/") + f"/history/{prompt_id}"
     url_all = base_url.rstrip("/") + "/history"
 
     last_payload: Optional[Dict[str, Any]] = None
-    while asyncio.get_event_loop().time() < deadline:
+    while time.monotonic() < deadline:
         try:
             async with session.get(url_one) as resp:
                 data = await resp.json(content_type=None)

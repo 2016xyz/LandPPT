@@ -176,12 +176,13 @@ class LandPPTChatModel(BaseChatModel):
         run_manager: Optional[Any] = None,
         **kwargs: Any,
     ) -> Any:
+        # 同步入口（LangChain sync path）：可能在没有事件循环的线程里被调用，
+        # 显式创建专用循环执行 async 生成，并在结束后关闭，避免泄漏/复用冲突。
+        loop = asyncio.new_event_loop()
         try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        return loop.run_until_complete(self._agenerate(messages, stop=stop, run_manager=run_manager, **kwargs))
+            return loop.run_until_complete(self._agenerate(messages, stop=stop, run_manager=run_manager, **kwargs))
+        finally:
+            loop.close()
 
 
 def get_langchain_chat_model(

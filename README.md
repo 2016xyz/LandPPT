@@ -269,6 +269,19 @@ docker logs -f landppt
 ```
 
 > 运行前请先创建并配置 `.env`（至少包含 AI API Key）。
+>
+> **SQLite 注意**：`.env.example` 默认 `DATABASE_URL=sqlite:///./landppt.db`，
+> 数据库文件落在容器内 `/app/landppt.db`，**不在任何挂载卷里**，容器重建会丢数据。
+> 单容器跑 SQLite 时请额外挂载（或改用 PostgreSQL / compose 编排）：
+>
+> ```bash
+> # 方式 A：把默认 SQLite 文件放进持久卷
+> # 在 .env 中设置 DATABASE_URL=sqlite:////app/data/landppt.db
+>
+> # 方式 B：直接挂载 db 文件所在目录
+> docker run ... -v $(pwd)/dbdata:/app/dbdata \
+>   -e DATABASE_URL=sqlite:////app/dbdata/landppt.db ...
+> ```
 
 ### 方式四：Docker Compose（推荐生产）
 

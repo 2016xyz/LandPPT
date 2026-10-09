@@ -61,7 +61,7 @@ class ImageProcessor:
                 options = ImageProcessingOptions()
             
             # 在线程池中执行图片处理
-            result = await asyncio.get_event_loop().run_in_executor(
+            result = await asyncio.get_running_loop().run_in_executor(
                 None, self._process_image_sync, input_path, output_path, options
             )
             
@@ -328,7 +328,7 @@ class ImageProcessor:
                     has_transparency=img.mode in ('RGBA', 'LA', 'P')
                 )
         
-        return await asyncio.get_event_loop().run_in_executor(None, _get_metadata)
+        return await asyncio.get_running_loop().run_in_executor(None, _get_metadata)
     
     async def create_thumbnail(self, 
                              input_path: Path, 

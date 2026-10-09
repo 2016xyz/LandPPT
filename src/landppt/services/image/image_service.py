@@ -719,7 +719,7 @@ class ImageService:
                 quota_bytes = quota_mb * 1024 * 1024
 
                 # Multi-worker processes: refresh filesystem index so new uploads/deletes are visible across workers.
-                await asyncio.get_event_loop().run_in_executor(None, self.cache_manager._load_cache_index)
+                await asyncio.get_running_loop().run_in_executor(None, self.cache_manager._load_cache_index)
 
                 content_hash = hashlib.sha256(file_data).hexdigest()
                 cache_key = f"u{user_id}_{content_hash}"

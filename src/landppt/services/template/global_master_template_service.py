@@ -1314,7 +1314,7 @@ class GlobalMasterTemplateService:
             if lo_path:
                 try:
                     import subprocess
-                    loop = asyncio.get_event_loop()
+                    loop = asyncio.get_running_loop()
                     proc_result = await loop.run_in_executor(
                         None,
                         lambda: subprocess.run(

@@ -74,7 +74,7 @@ class FileSystemStorageProvider(LocalStorageProvider):
                 with open(file_path, 'wb') as f:
                     f.write(file_data)
             
-            await asyncio.get_event_loop().run_in_executor(None, _save)
+            await asyncio.get_running_loop().run_in_executor(None, _save)
             
             # 创建图片信息
             image_info = await self._create_image_info(
@@ -319,7 +319,7 @@ class FileSystemStorageProvider(LocalStorageProvider):
                         has_transparency = img.mode in ['RGBA', 'LA'] or 'transparency' in img.info
                         return width, height, color_mode, has_transparency
 
-                return await asyncio.get_event_loop().run_in_executor(None, _get_dims)
+                return await asyncio.get_running_loop().run_in_executor(None, _get_dims)
             else:
                 # 从文件读取
                 def _get_dims():
@@ -329,7 +329,7 @@ class FileSystemStorageProvider(LocalStorageProvider):
                         has_transparency = img.mode in ['RGBA', 'LA'] or 'transparency' in img.info
                         return width, height, color_mode, has_transparency
 
-                return await asyncio.get_event_loop().run_in_executor(None, _get_dims)
+                return await asyncio.get_running_loop().run_in_executor(None, _get_dims)
 
         except Exception as e:
             logger.warning(f"Failed to get image dimensions for {file_path}: {e}")

@@ -205,7 +205,7 @@ class StableDiffusionProvider(ImageGenerationProvider):
             with open(image_path, 'wb') as f:
                 f.write(image_data)
         
-        await asyncio.get_event_loop().run_in_executor(None, _save)
+        await asyncio.get_running_loop().run_in_executor(None, _save)
         
         return image_path
     

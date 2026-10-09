@@ -129,7 +129,7 @@ class ImageCacheManager:
         except Exception as exc:
             logger.warning("Failed to read image artifact usage for user %s: %s", user_id, exc)
             if refresh_index:
-                await asyncio.get_event_loop().run_in_executor(None, self._load_cache_index)
+                await asyncio.get_running_loop().run_in_executor(None, self._load_cache_index)
 
             prefix = f"u{user_id}_"
             total_size = 0
@@ -219,7 +219,7 @@ class ImageCacheManager:
                 quota_bytes = quota_mb * 1024 * 1024
 
                 # Multi-worker processes: refresh filesystem index so new uploads/deletes are visible across workers.
-                await asyncio.get_event_loop().run_in_executor(None, self._load_cache_index)
+                await asyncio.get_running_loop().run_in_executor(None, self._load_cache_index)
 
                 used_bytes = await self.get_user_storage_usage_bytes(owner_user_id, refresh_index=False)
                 if used_bytes + len(image_data) > quota_bytes:
@@ -244,7 +244,7 @@ class ImageCacheManager:
             file_path = cache_path / f"{cache_key}{file_extension}"
 
             # 保存图片文件
-            await asyncio.get_event_loop().run_in_executor(
+            await asyncio.get_running_loop().run_in_executor(
                 None, self._save_image_file, file_path, image_data
             )
 
@@ -478,7 +478,7 @@ class ImageCacheManager:
             return None
 
         try:
-            found = await asyncio.get_event_loop().run_in_executor(None, _find_file)
+            found = await asyncio.get_running_loop().run_in_executor(None, _find_file)
             if not found or not found.exists():
                 return None
 
@@ -549,17 +549,17 @@ class ImageCacheManager:
             # 删除图片文件
             file_path = Path(cache_info.file_path)
             if file_path.exists():
-                await asyncio.get_event_loop().run_in_executor(None, file_path.unlink)
+                await asyncio.get_running_loop().run_in_executor(None, file_path.unlink)
             
             # 删除缩略图
             thumbnail_path = self.thumbnails_dir / f"{cache_key}.jpg"
             if thumbnail_path.exists():
-                await asyncio.get_event_loop().run_in_executor(None, thumbnail_path.unlink)
+                await asyncio.get_running_loop().run_in_executor(None, thumbnail_path.unlink)
             
             # 删除元数据
             metadata_path = self.metadata_dir / f"{cache_key}.json"
             if metadata_path.exists():
-                await asyncio.get_event_loop().run_in_executor(None, metadata_path.unlink)
+                await asyncio.get_running_loop().run_in_executor(None, metadata_path.unlink)
             
             # 从索引中移除
             del self._cache_index[cache_key]
@@ -583,7 +583,7 @@ class ImageCacheManager:
             with open(metadata_path, 'w', encoding='utf-8') as f:
                 json.dump(metadata, f, ensure_ascii=False, indent=2)
 
-        await asyncio.get_event_loop().run_in_executor(None, _save)
+        await asyncio.get_running_loop().run_in_executor(None, _save)
 
     async def _save_image_metadata_reference(self, content_hash: str, image_info: ImageInfo):
         """保存图片元数据引用 - 为同一内容的图片保存多个引用"""
@@ -600,7 +600,7 @@ class ImageCacheManager:
             with open(reference_path, 'w', encoding='utf-8') as f:
                 json.dump(metadata, f, ensure_ascii=False, indent=2)
 
-        await asyncio.get_event_loop().run_in_executor(None, _save)
+        await asyncio.get_running_loop().run_in_executor(None, _save)
         logger.debug(f"Saved metadata reference: {reference_filename}")
     
     async def _load_image_metadata(self, cache_key: str) -> Optional[ImageInfo]:
@@ -616,7 +616,7 @@ class ImageCacheManager:
                 return json.load(f)
 
         try:
-            metadata = await asyncio.get_event_loop().run_in_executor(None, _load)
+            metadata = await asyncio.get_running_loop().run_in_executor(None, _load)
             image_info = ImageInfo(**metadata)
             logger.debug(f"Successfully loaded metadata for cache key: {cache_key}")
             return image_info
@@ -770,7 +770,7 @@ class ImageCacheManager:
             ]
 
             for directory in directories_to_clear:
-                await asyncio.get_event_loop().run_in_executor(None, _clear_directory_contents, directory)
+                await asyncio.get_running_loop().run_in_executor(None, _clear_directory_contents, directory)
 
             logger.info("Cleared all orphaned cache files")
 

@@ -1504,7 +1504,7 @@ class GoogleProvider(AIProvider):
     ):
         """Async wrapper for Gemini generation - supports both text and multimodal content"""
         import asyncio
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         def _generate_sync():
             kwargs = {

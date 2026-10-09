@@ -1484,6 +1484,13 @@ class NarrationService:
         resolved_workflow = self._resolve_comfyui_workflow_path(workflow_raw)
         if not resolved_workflow:
             resolved_workflow = self._resolve_comfyui_workflow_path("tests/Qwen3-TD-TTS.json")
+        if not resolved_workflow:
+            # Docker 镜像不含 tests/；回退到随包分发的默认工作流。
+            from .comfyui_tts_client import bundled_workflow_template
+
+            bundled = bundled_workflow_template("Qwen3-TD-TTS.json")
+            if bundled.exists():
+                resolved_workflow = str(bundled)
         workflow_path = resolved_workflow or "tests/Qwen3-TD-TTS.json"
 
         timeout_s = cfg.get("timeout_s", None)

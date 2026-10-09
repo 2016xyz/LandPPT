@@ -262,17 +262,6 @@ async def get_project_slides_data(
         raise HTTPException(status_code=500, detail=f"获取幻灯片数据失败: {str(exc)}")
 
 
-@router.get("/test/slides-navigation", response_class=HTMLResponse)
-async def test_slides_navigation(
-    request: Request,
-    user: User = Depends(get_current_user_required),
-):
-    """测试幻灯片导航功能。"""
-    with open("test_slides_navigation.html", "r", encoding="utf-8") as file_handle:
-        content = file_handle.read()
-    return HTMLResponse(content=content)
-
-
 @router.get("/temp/{file_path:path}")
 async def serve_temp_file(file_path: str):
     """提供临时幻灯片文件。"""
