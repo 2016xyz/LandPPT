@@ -54,7 +54,7 @@
             <h3 class="section-heading" style="text-align: center; margin-bottom: 20px;">AI 提供者详情配置</h3>
 
             <div class="card" style="padding: 0; overflow: hidden;">
-                {% for provider in ["landppt", "openai", "anthropic", "google"] %}
+                {% for provider in ["landppt", "openai", "anthropic", "google", "deepseek", "kimi", "minimax"] %}
                 <div class="provider-accordion-item" data-provider="{{ provider }}"
                     style="border-bottom: 1px solid #eee;">
                     <!-- 提供者标题行 -->
@@ -71,6 +71,9 @@
                                 {% elif provider == "openai" %}OpenAI
                                 {% elif provider == "anthropic" %}Anthropic Claude
                                 {% elif provider == "google" %}Google Gemini
+                                {% elif provider == "deepseek" %}DeepSeek
+                                {% elif provider == "kimi" %}Kimi (Moonshot)
+                                {% elif provider == "minimax" %}MiniMax
                                 {% endif %}
                             </span>
                             {% if provider != "landppt" %}
@@ -290,6 +293,77 @@
                                     value="{{ current_config.get('google_model', '') }}" placeholder="gemini-2.5-flash"
                                     style="width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.9em;">
                             </div>
+                            {% elif provider == "deepseek" %}
+                            <div class="form-group" style="margin: 0;">
+                                <label style="font-size: 0.85em; color: #555; margin-bottom: 4px; display: block;">API
+                                    Key</label>
+                                <input type="password" name="deepseek_api_key"
+                                    value="{{ current_config.get('deepseek_api_key', '') }}"
+                                    placeholder="your-deepseek-api-key"
+                                    style="width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.9em;">
+                            </div>
+                            <div class="form-group" style="margin: 0;">
+                                <label style="font-size: 0.85em; color: #555; margin-bottom: 4px; display: block;">Base
+                                    URL</label>
+                                <input type="text" name="deepseek_base_url"
+                                    value="{{ current_config.get('deepseek_base_url', '') }}"
+                                    placeholder="https://api.deepseek.com/v1"
+                                    style="width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.9em;">
+                            </div>
+                            <div class="form-group" style="margin: 0;">
+                                <label
+                                    style="font-size: 0.85em; color: #555; margin-bottom: 4px; display: block;">默认模型</label>
+                                <input type="text" name="deepseek_model"
+                                    value="{{ current_config.get('deepseek_model', '') }}" placeholder="deepseek-chat"
+                                    style="width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.9em;">
+                            </div>
+                            {% elif provider == "kimi" %}
+                            <div class="form-group" style="margin: 0;">
+                                <label style="font-size: 0.85em; color: #555; margin-bottom: 4px; display: block;">API
+                                    Key</label>
+                                <input type="password" name="kimi_api_key"
+                                    value="{{ current_config.get('kimi_api_key', '') }}" placeholder="your-kimi-api-key"
+                                    style="width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.9em;">
+                            </div>
+                            <div class="form-group" style="margin: 0;">
+                                <label style="font-size: 0.85em; color: #555; margin-bottom: 4px; display: block;">Base
+                                    URL</label>
+                                <input type="text" name="kimi_base_url"
+                                    value="{{ current_config.get('kimi_base_url', '') }}"
+                                    placeholder="https://api.moonshot.cn/v1"
+                                    style="width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.9em;">
+                            </div>
+                            <div class="form-group" style="margin: 0;">
+                                <label
+                                    style="font-size: 0.85em; color: #555; margin-bottom: 4px; display: block;">默认模型</label>
+                                <input type="text" name="kimi_model"
+                                    value="{{ current_config.get('kimi_model', '') }}" placeholder="kimi-k2.5"
+                                    style="width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.9em;">
+                            </div>
+                            {% elif provider == "minimax" %}
+                            <div class="form-group" style="margin: 0;">
+                                <label style="font-size: 0.85em; color: #555; margin-bottom: 4px; display: block;">API
+                                    Key</label>
+                                <input type="password" name="minimax_api_key"
+                                    value="{{ current_config.get('minimax_api_key', '') }}"
+                                    placeholder="your-minimax-api-key"
+                                    style="width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.9em;">
+                            </div>
+                            <div class="form-group" style="margin: 0;">
+                                <label style="font-size: 0.85em; color: #555; margin-bottom: 4px; display: block;">Base
+                                    URL</label>
+                                <input type="text" name="minimax_base_url"
+                                    value="{{ current_config.get('minimax_base_url', '') }}"
+                                    placeholder="https://api.minimax.io/v1"
+                                    style="width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.9em;">
+                            </div>
+                            <div class="form-group" style="margin: 0;">
+                                <label
+                                    style="font-size: 0.85em; color: #555; margin-bottom: 4px; display: block;">默认模型</label>
+                                <input type="text" name="minimax_model"
+                                    value="{{ current_config.get('minimax_model', '') }}" placeholder="MiniMax-M2.7"
+                                    style="width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.9em;">
+                            </div>
                             {% elif provider == "ollama" %}
                             <div class="form-group" style="margin: 0;">
                                 <label style="font-size: 0.85em; color: #555; margin-bottom: 4px; display: block;">Base
@@ -385,7 +459,7 @@
                                             {% if current_config.get(role.provider_field) == "ollama" %}
                                             <option value="ollama" selected hidden>ollama</option>
                                             {% endif %}
-                                            {% for provider in ["landppt", "openai", "anthropic", "google"] %}
+                                            {% for provider in ["landppt", "openai", "anthropic", "google", "deepseek", "kimi", "minimax"] %}
                                             <option value="{{ provider }}" {% if
                                                 current_config.get(role.provider_field)==provider %}selected{% endif %}>
                                                 {{ provider }}</option>

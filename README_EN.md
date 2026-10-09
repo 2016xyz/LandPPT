@@ -73,7 +73,7 @@ LandPPT folds outline writing, layout, imagery, speaker notes, and export into o
 ### Multi-AI providers
 
 - OpenAI GPT, Anthropic Claude, Google Gemini, Azure OpenAI  
-- OpenAI-compatible endpoints (DeepSeek, Moonshot, Qwen, …)  
+- Built-in DeepSeek, Kimi (Moonshot), and MiniMax providers, plus any OpenAI-compatible endpoint (Qwen, …)  
 - Ollama local models; per-role routing (outline / slides / editor / template / speech) for cost control  
 
 ### Files & deep research
@@ -315,6 +315,7 @@ Local/dev often bootstraps `admin` / `admin123` via `LANDPPT_BOOTSTRAP_ADMIN_*`.
 In the settings UI or `.env`:
 
 - OpenAI API key (also works with DeepSeek, Moonshot, Qwen, and other OpenAI-compatible APIs)  
+- Built-in DeepSeek / Kimi / MiniMax providers: set `DEEPSEEK_API_KEY` / `KIMI_API_KEY` / `MINIMAX_API_KEY` and pick them in the settings UI  
 - Anthropic / Google API keys  
 - Or local Ollama  
 
@@ -416,7 +417,9 @@ APRYSE_LICENSE_KEY=...
 
 # Optional ComfyUI TTS
 # COMFYUI_BASE_URL=http://127.0.0.1:8188
-# COMFYUI_TTS_WORKFLOW_PATH=tests/Qwen3-TD-TTS.json
+# The default workflow ships inside the package (src/landppt/assets/Qwen3-TD-TTS.json)
+# and works out of the box, including in Docker. Only set this to use a custom workflow.
+# COMFYUI_TTS_WORKFLOW_PATH=src/landppt/assets/Qwen3-TD-TTS.json
 
 # Registration / OAuth / email / credits / Turnstile
 # ENABLE_USER_REGISTRATION=true

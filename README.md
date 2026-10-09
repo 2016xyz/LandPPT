@@ -73,7 +73,7 @@ LandPPT 将「写大纲 → 做版式 → 配图 → 写讲稿 → 导出」整�
 ### 多 AI 提供商
 
 - OpenAI GPT、Anthropic Claude、Google Gemini、Azure OpenAI  
-- 兼容 DeepSeek、Moonshot、Qwen 等 OpenAI 协议接口  
+- 内置 DeepSeek、Kimi（Moonshot）、MiniMax 供应商，也兼容任意 OpenAI 协议接口（Qwen 等）  
 - 支持 Ollama 本地模型；按角色（大纲 / 幻灯片 / 编辑 / 模板 / 讲稿）路由模型，便于控成本  
 
 ### 文件处理与深度研究
@@ -333,7 +333,8 @@ docker compose -f docker-compose-dev.yaml logs -f landppt
 
 在设置页或 `.env` 中配置：
 
-- OpenAI API Key（兼容 DeepSeek、Moonshot、Qwen 等 OpenAI 协议接口）  
+- OpenAI API Key（也兼容 DeepSeek、Moonshot、Qwen 等 OpenAI 协议接口）  
+- 内置 DeepSeek / Kimi / MiniMax 供应商：分别设置 `DEEPSEEK_API_KEY` / `KIMI_API_KEY` / `MINIMAX_API_KEY` 即可在设置页选择  
 - Anthropic / Google API Key  
 - 或本地 Ollama  
 
@@ -435,7 +436,9 @@ APRYSE_LICENSE_KEY=...
 
 # 讲解 TTS（可选 ComfyUI）
 # COMFYUI_BASE_URL=http://127.0.0.1:8188
-# COMFYUI_TTS_WORKFLOW_PATH=tests/Qwen3-TD-TTS.json
+# 默认工作流随包内置（src/landppt/assets/Qwen3-TD-TTS.json），不配置即可用；
+# 自定义时才需要指向自己的 JSON 路径或 URL。
+# COMFYUI_TTS_WORKFLOW_PATH=src/landppt/assets/Qwen3-TD-TTS.json
 
 # 注册 / OAuth / 邮件 / 积分 / Turnstile
 # ENABLE_USER_REGISTRATION=true

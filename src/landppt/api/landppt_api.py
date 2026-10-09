@@ -208,15 +208,27 @@ async def test_ai_provider(provider_name: str, request: Request):
         except:
             pass  # No JSON body, use backend config
 
-        # Special handling for OpenAI provider with frontend config
-        if provider_name == "openai" and body:
+        # Special handling for OpenAI-compatible providers with frontend config.
+        # deepseek / kimi / minimax use the OpenAI chat-completions protocol too,
+        # so the same direct test path applies.
+        if provider_name in ("openai", "deepseek", "kimi", "minimax") and body:
             base_url = body.get('base_url')
             api_key = body.get('api_key')
-            model = body.get('model', 'gpt-4o')
+            model = body.get('model', 'gpt-4o' if provider_name == "openai" else None)
+
+            if provider_name != "openai" and not model:
+                # Use the packaged default model for the provider when the
+                # frontend did not send one.
+                defaults = {
+                    "deepseek": "deepseek-chat",
+                    "kimi": "kimi-k2.5",
+                    "minimax": "MiniMax-M2.7",
+                }
+                model = defaults.get(provider_name, "gpt-4o")
             
             if base_url and api_key:
                 # Use frontend provided config for OpenAI
-                logger.info(f"Testing OpenAI with frontend config: {base_url}")
+                logger.info(f"Testing {provider_name} with frontend config: {base_url}")
                 
                 # Ensure base URL ends with /v1
                 if not base_url.endswith('/v1'):
