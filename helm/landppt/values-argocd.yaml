@@ -11,16 +11,16 @@ fullnameOverride: landppt
 image:
   # Initial value keeps the current in-cluster local image working.
   # GitHub Actions will update this to ghcr.io/<owner>/landppt on the next source change.
-  repository: "ghcr.io/sligter/landppt"
-  tag: "git-8859239d9c1421ab2fb766abe52616ca5c7323a6"
+  repository: "ghcr.io/2016xyz/landppt"
+  tag: "git-1ab500a52a6af8d3de6c4d146600b5af3509657e"
   pullPolicy: "IfNotPresent"
 
 pptxRenderer:
   enabled: true
   image:
-    repository: "ghcr.io/sligter/landppt-pptx-renderer"
+    repository: "ghcr.io/2016xyz/landppt-pptx-renderer"
     # Bootstrap until CI publishes the first renderer and pins both git tags.
-    tag: "git-8859239d9c1421ab2fb766abe52616ca5c7323a6"
+    tag: "git-1ab500a52a6af8d3de6c4d146600b5af3509657e"
     pullPolicy: "IfNotPresent"
   spool:
     # This cluster uses single-node local-path storage.
