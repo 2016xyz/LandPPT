@@ -1,0 +1,37 @@
+{
+  "19": {
+    "class_type": "LoadAudio",
+    "inputs": {
+      "audio": "ref.wav"
+    }
+  },
+  "24": {
+    "class_type": "TDQwen3TTSModelLoader",
+    "inputs": {
+      "model_precision": "bf16",
+      "attn_implementation": "sdpa"
+    }
+  },
+  "31": {
+    "class_type": "TDQwen3TTSVoiceClone",
+    "inputs": {
+      "text": "示例文本",
+      "language": "Chinese",
+      "ref_text": "",
+      "ref_audio": [
+        "19",
+        0
+      ]
+    }
+  },
+  "40": {
+    "class_type": "SaveAudio",
+    "inputs": {
+      "audio": [
+        "31",
+        0
+      ],
+      "filename_prefix": "tts_output"
+    }
+  }
+}

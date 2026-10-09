@@ -162,7 +162,7 @@ def test_export_task_download_allows_admin_bypass(monkeypatch, tmp_path):
 
 
 def test_export_task_route_source_includes_owner_scoping_changes():
-    source = Path("/root/clawd/src/landppt/web/route_modules/export_routes.py").read_text(encoding="utf-8")
+    source = (Path(__file__).resolve().parents[1] / "src" / "landppt" / "web" / "route_modules" / "export_routes.py").read_text(encoding="utf-8")
 
     assert 'metadata_filter={"project_id": project_id, "user_id": user.id}' in source
     assert '"user_id": user.id' in source
@@ -172,7 +172,7 @@ def test_export_task_route_source_includes_owner_scoping_changes():
 
 
 def test_narration_task_route_source_includes_owner_scoping_changes():
-    source = Path("/root/clawd/src/landppt/web/route_modules/narration_routes.py").read_text(encoding="utf-8")
+    source = (Path(__file__).resolve().parents[1] / "src" / "landppt" / "web" / "route_modules" / "narration_routes.py").read_text(encoding="utf-8")
 
     assert 'metadata_filter={"project_id": project_id, "language": language, "provider": provider, "user_id": user.id}' in source
     assert '"user_id": user.id' in source

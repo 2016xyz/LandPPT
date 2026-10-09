@@ -69,6 +69,6 @@ async def test_startup_initialization_runs_in_order(monkeypatch):
 
     monkeypatch.setattr(main_module, "run_startup_initialization", fake_run_startup_initialization)
 
-    await main_module.startup_event()
+    await main_module.startup_application()
 
     assert calls == ["run_startup_initialization"]

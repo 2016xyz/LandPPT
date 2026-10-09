@@ -59,6 +59,16 @@ class DesignPrompts:
 - 溢出时优先删减/分组/限高，不挤压锚点区；正文容器禁止用 ellipsis / line-clamp 截断关键信息，装不下就减字或改布局。
 - 版面取舍：优先守住完整容纳和锚点稳定，再决定装饰强度与版式复杂度。
 
+**固定画布实现提醒**
+- 让根容器保持 `1280×720` 并配合 `overflow:hidden`，更容易守住固定画布边界。
+- 更适合把主内容区当作主要重构区，锚点区尽量沿用模板的容器层级和位置逻辑。
+- 页码锚点优先跟随模板原有位置关系。
+- 首页和尾页通常更适合弱化页码。
+
+**骨架稳定性**
+- 使用 flex 骨架时，让锚点区保持稳定，给主内容区留出可收缩空间。
+- 使用 grid 骨架时，为主内容轨道预留真正可压缩的范围，避免轨道把内容顶出画布。
+
 **高度分配与内容偏少处理**
 - 主舞台可用 flex:1 占据剩余高度；但舞台内的内容卡片/步骤块/模块默认按内容定高，禁止被 stretch 成等高空壳。
 - 禁止用 margin-top:auto 或 justify-content:space-between 把短文案与底部标签拉开制造中空。
@@ -74,11 +84,19 @@ class DesignPrompts:
     def _build_design_quality_context() -> str:
         return """
 **内容与设计质量**
-- 信息密度与主题复杂度相称：先建立事实和层次，再加入装饰。
+- 信息密度与主题复杂度相称：先建立事实和层次，再加入装饰；内容单薄时先补足事实、层次和结论，而不是用装饰填充。
 - 留白服务于分组和节奏，不替代内容；背景、数据、结论形成有区分度的前后层次。
 - 先为页面建立清晰的第一视觉落点，再展开阅读动线。
 - 通过分组、对比、层叠、方向变化或留白张力建立主次关系——即使内容项数量对等，也通过尺寸、位置、色彩重量的差异制造视觉层次。
+- 每个要点展开为完整信息单元（结论 + 支撑事实/数据/机制 + 落地方式），不要只留短语占位。
+- 避免把信息平均切成四宫格这类均质化结构；即使内容天然四等分，也应通过主次、轻重、大小、节奏或焦点转移建立层次差异。
 - 当内容偏多时，优先换一种更合适的组织方式，再考虑压缩细节。
+
+**创意思考顺序**
+1. 明确本页核心任务与观众应带走的一个关键结论。
+2. 决定信息的主次关系和阅读动线。
+3. 选择能表达该关系的空间结构，再考虑视觉重心与装饰策略。
+装饰和点缀放大构图，但不能替代构图。
 
 **组件一致性**
 - 同级步骤/节点的标记形态统一：全数字，或「数字+同构小图标」；禁止同一序列内有的纯图标、有的纯数字。
@@ -88,6 +106,9 @@ class DesignPrompts:
 - 指标数字带对比对象或口径（如「较 X 方案 ≈10×」），避免孤立的「更快更省」。
 - 字体只写实际会生效的字体栈（系统字体或模板已提供的 @font-face），不写未加载的 web font 名。
 """.strip()
+
+    # 兼容别名：部分调用方/测试引用旧名称。
+    _build_content_quality_context = _build_design_quality_context
 
     # -- 模板理解方向 --
     @staticmethod
@@ -186,6 +207,75 @@ class DesignPrompts:
         return strip_base64_image_payloads_for_prompt(template_html or "")
 
     @staticmethod
+    def _extract_header_footer_html(template_html):
+        """从模板 HTML 中提取页眉/页脚的 HTML 片段与对应 CSS。
+
+        优先识别 slide-header / slide-footer 语义类；无语义类时回退到
+        位置启发式（顶部标题区 / 底部绝对定位页码区）。
+        返回 dict: header_html, footer_html, header_css, footer_css（找不到为空串）。
+        """
+        result = {"header_html": "", "footer_html": "", "header_css": "", "footer_css": ""}
+        if not template_html:
+            return result
+
+        try:
+            from bs4 import BeautifulSoup
+
+            soup = BeautifulSoup(template_html, "html.parser")
+
+            header = soup.select_one(".slide-header, [class*='slide-header']")
+            footer = soup.select_one(".slide-footer, [class*='slide-footer']")
+
+            # 位置启发式回退：无语义类时找顶部第一个标题容器 / 底部含页码占位符的元素
+            if footer is None:
+                for el in soup.find_all(["div", "footer", "p", "span"]):
+                    classes = " ".join(el.get("class") or [])
+                    if classes and ("slide-" in classes):
+                        continue
+                    style = el.get("style") or ""
+                    text = el.get_text() or ""
+                    if "bottom" in style and ("page_number" in text or "total_page" in text):
+                        footer = el
+                        break
+            if header is None:
+                for el in soup.find_all(["div", "header", "h1", "h2"]):
+                    style = el.get("style") or ""
+                    classes = " ".join(el.get("class") or [])
+                    if classes and ("slide-" in classes):
+                        continue
+                    if "top" in style and el.find(["h1", "h2", "h3"]):
+                        header = el
+                        break
+
+            if header is not None:
+                result["header_html"] = header.decode() if hasattr(header, "decode") else str(header)
+            if footer is not None:
+                result["footer_html"] = footer.decode() if hasattr(footer, "decode") else str(footer)
+        except Exception:
+            # 解析失败时保持空串，调用方走无锁定区提示。
+            return result
+
+        # 提取 <style> 中与 header/footer 相关的 CSS 规则
+        import re
+
+        css_blocks = re.findall(r"<style[^>]*>(.*?)</style>", template_html, flags=re.DOTALL | re.IGNORECASE)
+        css_text = "\n".join(css_blocks)
+        if css_text:
+            rules = re.findall(r"([^{}]+)\{([^{}]*)\}", css_text)
+            header_rules = []
+            footer_rules = []
+            for selector, body in rules:
+                sel = selector.strip()
+                if "slide-header" in sel or "slide-title" in sel:
+                    header_rules.append(f"{sel}{{{body}}}")
+                if "slide-footer" in sel:
+                    footer_rules.append(f"{sel}{{{body}}}")
+            result["header_css"] = "\n".join(header_rules).strip()
+            result["footer_css"] = "\n".join(footer_rules).strip()
+
+        return result
+
+    @staticmethod
     def _build_locked_zones_context(template_html: str, page_number: int,
                                      total_pages: int, slide_type: str,
                                      slide_title: str = "") -> str:
@@ -198,8 +288,33 @@ class DesignPrompts:
         if is_first or is_last or is_catalog or not template_html:
             return ""
 
+        zones = DesignPrompts._extract_header_footer_html(template_html)
+        header_html = (zones.get("header_html") or "").strip()
+        footer_html = (zones.get("footer_html") or "").strip()
+        header_css = (zones.get("header_css") or "").strip()
+        footer_css = (zones.get("footer_css") or "").strip()
+
+        if header_html or footer_html:
+            parts = ["**稳定区域理解方向**", "**母板锁定区**"]
+            if header_html:
+                parts.append("Header 锁定结构（保持位置与层级，仅替换文案）：")
+                parts.append("```html\n" + header_html + "\n```")
+                if header_css:
+                    parts.append("Header 对应 CSS：")
+                    parts.append("```css\n" + header_css + "\n```")
+            if footer_html:
+                parts.append("Footer 锁定结构（保持位置与页码占位符）：")
+                parts.append("```html\n" + footer_html + "\n```")
+                if footer_css:
+                    parts.append("Footer 对应 CSS：")
+                    parts.append("```css\n" + footer_css + "\n```")
+            parts.append("结合上方模板 HTML 原文，自行识别标题区、页码区和其他稳定锚点。")
+            parts.append("普通内容页只在主内容区重新组织信息，不要移动或删除上述锁定结构。")
+            return "\n\n".join(parts).strip()
+
         return """
 **稳定区域理解方向**
+**母板锁定区提示**：未能从模板中精确提取页眉/页脚结构。
 结合上方模板 HTML 原文，自行识别标题区、页码区和其他稳定锚点。
 普通内容页更适合沿用这些区域的层级、位置关系和语气，只在主内容区重新组织信息。
 """.strip()
@@ -513,7 +628,7 @@ composition_brief 的六个字段均为非空字符串：
 - 若当前页数据包含 composition_brief，先落实其中的页面意图、信息关系、焦点和跨页节奏；版式建议可按内容调整。
 - 根据标题长度、要点数量、是否含图表/表格/时间线等，判断适合放大焦点、保持均衡还是压缩收敛
 - 从版式工具箱中选择最合适的方法，转化为可执行建议
-- 即使内容项数量对等，也主动建立视觉层次
+- 明确避免推荐四宫格等均质化布局；即使当前页内容天然四等分且主次关系一致，也必须主动建立视觉层次，不能做成均质排布
 - 给出方向和关系，让生成器根据内容自行推导
 
 请按以下结构输出：
@@ -779,7 +894,8 @@ composition_brief 的六个字段均为非空字符串：
 - 标题区和页码区作为母板锚定区，创意主要发生在主内容区。
 - 页码锚点优先跟随模板原有位置。
 - 吸收页面指导的方向建议，但可根据内容自由选择实现方式。
-- 在单一主任务前提下展开要点；信息已足够时优先精简或聚焦，而不是再叠加视觉模块。
+- 在单一主任务前提下展开要点（把每个要点展开为完整信息单元：结论 + 支撑事实/数据/机制 + 落地方式）；信息已足够时优先精简或聚焦，而不是再叠加视觉模块。
+- 避免推荐四宫格等均质化布局；即使当前页内容天然四等分且主次关系一致，也必须主动建立视觉层次，不能做成均质排布。
 """
         return DesignPrompts._finalize_prompt(prompt, {"include_page_numbers": include_page_numbers})
 

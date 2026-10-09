@@ -234,10 +234,10 @@ class AuthService:
             if existing_email:
                 raise ValueError("邮箱已存在")
         
-        # Get default credits for new users if credits system is enabled
-        default_credits = 0
-        if app_config.enable_credits_system:
-            default_credits = app_config.default_credits_for_new_users
+        # New users get the configured welcome credits. The credits-system flag
+        # gates earning/spending features; the initial grant follows
+        # DEFAULT_CREDITS_FOR_NEW_USERS so invite rewards stack on top of it.
+        default_credits = int(app_config.default_credits_for_new_users or 0)
         
         # Create new user
         user = User(

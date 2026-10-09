@@ -20,6 +20,7 @@ if "langchain_core.documents" not in sys.modules:
     setattr(langchain_core_module, "documents", documents_module)
 
 from landppt.ai.base import AIResponse, MessageRole
+from landppt.services.prompts.system_prompts import SystemPrompts
 from landppt.services.outline.project_outline_research_service import ProjectOutlineResearchService
 from landppt.services.outline.project_outline_streaming_service import ProjectOutlineStreamingService
 from landppt.services.runtime import runtime_research_service as runtime_research_module
@@ -163,7 +164,10 @@ async def test_runtime_provider_service_passes_system_prompt_to_chat_completion(
     assert len(provider.chat_calls) == 1
     messages, kwargs = provider.chat_calls[0]
     assert [message.role for message in messages] == [MessageRole.SYSTEM, MessageRole.USER]
-    assert messages[0].content == "只输出 JSON"
+    # system_prompt must keep its full original text; the stable cache prefix is
+    # prepended (see SystemPrompts.with_cache_prefix) for KV-cache reuse.
+    assert messages[0].content == SystemPrompts.with_cache_prefix("只输出 JSON")
+    assert messages[0].content.endswith("只输出 JSON")
     assert messages[1].content == "请生成大纲"
     assert kwargs["model"] == "fake-model"
 
@@ -195,7 +199,8 @@ async def test_runtime_provider_service_streaming_passes_system_prompt_to_chat_c
     assert len(provider.stream_chat_calls) == 1
     messages, kwargs = provider.stream_chat_calls[0]
     assert [message.role for message in messages] == [MessageRole.SYSTEM, MessageRole.USER]
-    assert messages[0].content == "只输出 JSON"
+    assert messages[0].content == SystemPrompts.with_cache_prefix("只输出 JSON")
+    assert messages[0].content.endswith("只输出 JSON")
     assert messages[1].content == "请生成大纲"
     assert kwargs["model"] == "fake-model"
 

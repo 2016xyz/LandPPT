@@ -217,7 +217,8 @@
     .pw-page-label small { display: none; }
     .pw-page-tools { gap: 4px; }
     .package-dialog .pw-page-tools button { padding: 4px 6px; font-size: .7rem; }
-    .pw-page-ai { gap: 6px; }
+    .pw-page-ai { gap: 6px; flex-wrap: wrap; }
+    .pw-page-ai button { flex: 1 1 auto; white-space: nowrap; }
     .pw-chat { border-left: 0; border-top: 1px solid #eee; }
     .pw-chat-head { padding: 4px 12px; }
     .pw-log { margin: 0; padding: 0 12px; font-size: .72rem; }

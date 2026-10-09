@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from typing import List, Optional, Dict, Any, AsyncGenerator
 import logging
 import asyncio
+import time
 from pathlib import Path
 
 from ..models import (
@@ -28,8 +29,10 @@ class BaseImageProvider(ABC):
         self.timeout = config.get('timeout', 30)  # 请求超时时间
         
         # 请求计数器（简单的速率限制）
+        # 使用单调时钟而非 asyncio.get_event_loop()：构造可能在无事件循环的
+        # 上下文中发生（Python 3.10+ 在非异步线程里 get_event_loop 会报错）。
         self._request_count = 0
-        self._last_reset = asyncio.get_event_loop().time()
+        self._last_reset = time.monotonic()
     
     @property
     @abstractmethod
@@ -45,7 +48,7 @@ class BaseImageProvider(ABC):
     
     async def _check_rate_limit(self) -> bool:
         """检查速率限制"""
-        current_time = asyncio.get_event_loop().time()
+        current_time = time.monotonic()
         
         # 每分钟重置计数器
         if current_time - self._last_reset > 60:

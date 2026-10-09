@@ -294,10 +294,9 @@ def get_or_create_user_by_linuxdo(
         if existing_username:
             new_username = f"{username}_{secrets.token_hex(4)}"
         
-        # Get default credits for new users
-        default_credits = 0
-        if app_config.enable_credits_system:
-            default_credits = app_config.default_credits_for_new_users
+        # New users get the configured welcome credits; invite rewards stack on
+        # top of DEFAULT_CREDITS_FOR_NEW_USERS (see auth_service.create_user).
+        default_credits = int(app_config.default_credits_for_new_users or 0)
         
         new_user = User(
             username=new_username,

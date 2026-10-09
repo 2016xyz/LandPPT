@@ -86,7 +86,11 @@ def resolve_subtitle_style(
 
 
 def build_subtitle_filter(*, subtitle_path: str, width: int, height: int, style: SubtitleStyle) -> str:
-    subtitle_ref = Path(subtitle_path).name.replace("\\", "/").replace(":", r"\:")
+    # ffmpeg 的 subtitles filter 里路径分隔符与盘符都必须转义；这里统一只取
+    # 文件名（兼容 Windows 反斜杠路径在 POSIX pathlib 下不被拆分的问题），
+    # 再转义非法字符，保证 filter 在任意平台拼出的字符串都可直接执行。
+    raw_name = str(subtitle_path).replace("\\", "/").rsplit("/", 1)[-1]
+    subtitle_ref = raw_name.replace(":", r"\:")
     return (
         f"subtitles={subtitle_ref}:original_size={int(width)}x{int(height)}:"
         f"force_style='{style.to_ffmpeg_force_style()}'"

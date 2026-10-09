@@ -12,6 +12,7 @@ import logging
 import os
 import sys
 import time
+from contextlib import asynccontextmanager
 from . import __version__
 from .api.openai_compat import router as openai_router
 from .api.landppt_api import router as landppt_router
@@ -42,19 +43,7 @@ logging.getLogger('sqlalchemy.engine.Engine').setLevel(logging.WARNING)
 logging.getLogger('sqlalchemy.pool').setLevel(logging.WARNING)
 logging.getLogger('sqlalchemy.dialects').setLevel(logging.WARNING)
 
-# Create FastAPI app
-app = FastAPI(
-    title="LandPPT API",
-    description="AI-powered PPT generation platform with OpenAI-compatible API",
-    version=__version__,
-    docs_url="/docs" if app_config.enable_api_docs else None,
-    redoc_url="/redoc" if app_config.enable_api_docs else None,
-    openapi_url="/openapi.json" if app_config.enable_api_docs else None,
-)
-
-
-@app.on_event("startup")
-async def startup_event():
+async def startup_application() -> None:
     """Initialize database on startup"""
     try:
         await run_startup_initialization()
@@ -64,8 +53,7 @@ async def startup_event():
         raise
 
 
-@app.on_event("shutdown")
-async def shutdown_event():
+async def shutdown_application() -> None:
     """Clean up database connections on shutdown"""
     try:
         logger.info("Shutting down application...")
@@ -78,6 +66,31 @@ async def shutdown_event():
         logger.info("Application shutdown complete")
     except Exception as e:
         logger.error(f"Error during shutdown: {e}")
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    await startup_application()
+    try:
+        yield
+    except asyncio.CancelledError:
+        # Uvicorn/Starlette may cancel the lifespan task during Windows
+        # shutdown or auto-reload teardown. Treat that as graceful exit.
+        pass
+    finally:
+        await shutdown_application()
+
+
+# Create FastAPI app
+app = FastAPI(
+    title="LandPPT API",
+    description="AI-powered PPT generation platform with OpenAI-compatible API",
+    version=__version__,
+    docs_url="/docs" if app_config.enable_api_docs else None,
+    redoc_url="/redoc" if app_config.enable_api_docs else None,
+    openapi_url="/openapi.json" if app_config.enable_api_docs else None,
+    lifespan=lifespan,
+)
 
 # Add CORS middleware
 app.add_middleware(

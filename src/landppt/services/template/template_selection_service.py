@@ -375,7 +375,53 @@ class TemplateSelectionService:
                 if free_html and isinstance(free_html, str) and free_html.strip():
                     return self._build_free_template_payload(free_name, free_html)
 
-                return None
+                # 懒生成：free 模式但尚无缓存模板时，同步生成一次并写回
+                # project_metadata，避免并行幻灯片生成各自触发模板生成。
+                lock = self._free_template_generation_locks.setdefault(
+                    project_id, asyncio.Lock()
+                )
+                async with lock:
+                    project = await self.project_manager.get_project(project_id, user_id=user_id)
+                    if not project:
+                        return None
+                    project_metadata = dict(project.project_metadata or {})
+                    if project_metadata.get("template_mode") != "free":
+                        return None
+
+                    free_html = project_metadata.get("free_template_html")
+                    free_name = project_metadata.get("free_template_name") or "自由模板（AI决定）"
+                    if free_html and isinstance(free_html, str) and free_html.strip():
+                        return self._build_free_template_payload(free_name, free_html)
+
+                    outline = project.outline or {}
+                    confirmed = project.confirmed_requirements or {}
+                    free_prompt = self._build_free_template_prompt(project, outline, confirmed)
+
+                    generated = await self.global_template_service.generate_template_with_ai(
+                        prompt=free_prompt,
+                        template_name=f"自由模板-{project_id[:8]}",
+                        description="AI 根据大纲自动生成的项目专属模板",
+                        tags=["自由模板", "AI生成", "项目专属"],
+                        generation_mode="text_only",
+                        prompt_is_ready=True,
+                    )
+
+                    free_html = (generated or {}).get("html_template", "")
+                    free_name = (generated or {}).get("template_name", free_name)
+                    if not isinstance(free_html, str) or not free_html.strip():
+                        logger.error("Free template generation returned empty HTML for project %s", project_id)
+                        return None
+
+                    project_metadata["template_mode"] = "free"
+                    project_metadata["free_template_html"] = free_html
+                    project_metadata["free_template_name"] = free_name
+                    project_metadata["free_template_prompt"] = free_prompt
+                    project_metadata["free_template_generated_at"] = time.time()
+                    project_metadata["free_template_status"] = "ready"
+                    await self.project_manager.update_project_metadata(project_id, project_metadata)
+                    self.clear_cached_style_genes(project_id)
+
+                    return self._build_free_template_payload(free_name, free_html)
 
             selected_template_id = project_metadata.get("selected_global_template_id")
             if selected_template_id:

@@ -1275,7 +1275,12 @@ class ImageService:
             raise
 
     async def clear_user_cache(self, user_id: Optional[int] = None) -> int:
-        """清空指定用户作用域下的图库图片；删除 artifact 对象和记录。"""
+        """清空指定用户作用域下的图库图片；删除 artifact 对象和记录。
+
+        权威记录在 artifact 表；本地兼容缓存（u<id>_ 前缀条目）同步清理。
+        返回两者中更大的删除数，保证 artifact 后端不可用时仍能正确反映
+        本地缓存清理结果（fixture/无 DB 环境下也能清空图库）。
+        """
         if not self.initialized:
             await self.initialize()
 
@@ -1283,32 +1288,53 @@ class ImageService:
         if effective_user_id is None or effective_user_id == USER_SCOPE_ALL:
             return await self.clear_all_cache()
 
+        # Local compatibility cache cleanup (also the fallback source of truth).
+        local_removed = 0
+        try:
+            prefix = f"u{int(effective_user_id)}_"
+            for cache_key in list(self.cache_manager._cache_index.keys()):
+                if cache_key.startswith(prefix):
+                    try:
+                        await self.cache_manager.remove_from_cache(cache_key, delete_artifact=False)
+                    except TypeError:
+                        # Tolerate cache managers with the legacy
+                        # remove_from_cache(cache_key) signature.
+                        await self.cache_manager.remove_from_cache(cache_key)
+                    local_removed += 1
+        except Exception as cleanup_error:
+            logger.warning(
+                "Local image cache cleanup failed for user %s: %s",
+                effective_user_id,
+                cleanup_error,
+            )
+
+        artifact_deleted = 0
         try:
             from ..storage import get_artifact_service
 
-            deleted_count = await get_artifact_service().delete_artifacts(
+            artifact_deleted = await get_artifact_service().delete_artifacts(
                 artifact_type="image_cache",
                 user_id=int(effective_user_id),
             )
-
-            # Best-effort cleanup for local compatibility cache.
-            try:
-                prefix = f"u{effective_user_id}_"
-                for cache_key in list(self.cache_manager._cache_index.keys()):
-                    if cache_key.startswith(prefix):
-                        await self.cache_manager.remove_from_cache(cache_key, delete_artifact=False)
-            except Exception:
-                pass
-
-            logger.info(
-                "Cleared user-scoped image artifacts for user %s, deleted %s images",
-                effective_user_id,
-                deleted_count,
-            )
-            return deleted_count
         except Exception as e:
-            logger.error(f"Failed to clear user image artifacts for user {effective_user_id}: {e}")
-            raise
+            # Artifacts are authoritative when present, but a storage/DB outage
+            # must not leave the user with an undeletable gallery.
+            logger.warning(
+                "Artifact deletion unavailable while clearing images for user %s: %s",
+                effective_user_id,
+                e,
+            )
+
+        deleted_count = max(artifact_deleted, local_removed)
+        logger.info(
+            "Cleared user-scoped image artifacts for user %s, deleted %s images "
+            "(artifacts=%s, local_cache=%s)",
+            effective_user_id,
+            deleted_count,
+            artifact_deleted,
+            local_removed,
+        )
+        return deleted_count
 
     async def deduplicate_cache(self) -> Dict[str, int]:
         """去重缓存中的重复图片"""

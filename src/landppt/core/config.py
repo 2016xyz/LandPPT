@@ -71,7 +71,21 @@ class AIConfig(BaseSettings):
     azure_openai_endpoint: Optional[str] = Field(default=None, env="AZURE_OPENAI_ENDPOINT")
     azure_openai_api_version: str = Field(default="2024-02-15-preview", env="AZURE_OPENAI_API_VERSION")
     azure_openai_deployment_name: Optional[str] = Field(default=None, env="AZURE_OPENAI_DEPLOYMENT_NAME")
-    
+
+    # OpenAI-Compatible Providers (DeepSeek / Kimi / MiniMax — restored after
+    # the 6153e56 refactor accidentally dropped them while tests kept the contract)
+    deepseek_api_key: Optional[str] = Field(default=None, env="DEEPSEEK_API_KEY")
+    deepseek_base_url: str = Field(default="https://api.deepseek.com/v1", env="DEEPSEEK_BASE_URL")
+    deepseek_model: str = Field(default="deepseek-chat", env="DEEPSEEK_MODEL")
+
+    kimi_api_key: Optional[str] = Field(default=None, env="KIMI_API_KEY")
+    kimi_base_url: str = Field(default="https://api.moonshot.cn/v1", env="KIMI_BASE_URL")
+    kimi_model: str = Field(default="kimi-k2.5", env="KIMI_MODEL")
+
+    minimax_api_key: Optional[str] = Field(default=None, env="MINIMAX_API_KEY")
+    minimax_base_url: str = Field(default="https://api.minimax.io/v1", env="MINIMAX_BASE_URL")
+    minimax_model: str = Field(default="MiniMax-M2.7", env="MINIMAX_MODEL")
+
     # Anthropic Configuration
     anthropic_api_key: Optional[str] = Field(default=None, env="ANTHROPIC_API_KEY")
     anthropic_base_url: str = Field(default="https://api.anthropic.com", env="ANTHROPIC_BASE_URL")
@@ -218,6 +232,12 @@ class AIConfig(BaseSettings):
         provider_key = self._normalize_provider(provider)
         if provider_key == "openai":
             return self._normalize_optional_str(self.openai_model)
+        if provider_key == "deepseek":
+            return self._normalize_optional_str(self.deepseek_model)
+        if provider_key == "kimi":
+            return self._normalize_optional_str(self.kimi_model)
+        if provider_key == "minimax":
+            return self._normalize_optional_str(self.minimax_model)
         if provider_key == "anthropic":
             return self._normalize_optional_str(self.anthropic_model)
         if provider_key in ("google", "gemini"):
@@ -298,6 +318,31 @@ class AIConfig(BaseSettings):
                 "temperature": self.temperature,
                 "top_p": self.top_p,
             },
+            "deepseek": {
+                "api_key": self.deepseek_api_key,
+                "base_url": self.deepseek_base_url,
+                "model": self.deepseek_model,
+                "max_tokens": self.max_tokens,
+                "temperature": self.temperature,
+                "top_p": self.top_p,
+            },
+            "kimi": {
+                "api_key": self.kimi_api_key,
+                "base_url": self.kimi_base_url,
+                "model": self.kimi_model,
+                "max_tokens": self.max_tokens,
+                "temperature": self.temperature,
+                "top_p": self.top_p,
+            },
+            "minimax": {
+                "api_key": self.minimax_api_key,
+                "base_url": self.minimax_base_url,
+                "model": self.minimax_model,
+                "max_tokens": self.max_tokens,
+                # MiniMax API rejects temperature above 1.0 — clamp it here.
+                "temperature": min(self.temperature, 1.0),
+                "top_p": self.top_p,
+            },
             "anthropic": {
                 "api_key": self.anthropic_api_key,
                 "base_url": self.anthropic_base_url,
@@ -349,6 +394,8 @@ class AIConfig(BaseSettings):
             return bool(config.get("api_key"))
         elif provider in ("azure_openai", "azure"):
             return bool(config.get("api_key") and config.get("azure_endpoint") and config.get("model"))
+        elif provider in ("deepseek", "kimi", "minimax"):
+            return bool(config.get("api_key"))
         elif provider == "anthropic":
             return bool(config.get("api_key"))
         elif provider == "google" or provider == "gemini":
@@ -365,7 +412,7 @@ class AIConfig(BaseSettings):
 
         # Add built-in providers. Note: "gemini" is an alias for "google" (same config),
         # so we only expose a single canonical provider name here to avoid duplicates in UIs.
-        for provider in ["openai", "azure_openai", "azure", "anthropic", "google", "gemini", "ollama"]:
+        for provider in ["openai", "azure_openai", "azure", "deepseek", "kimi", "minimax", "anthropic", "google", "gemini", "ollama"]:
             if not self.is_provider_available(provider):
                 continue
 
@@ -442,6 +489,15 @@ def reload_ai_config():
     ai_config.google_api_key = os.environ.get('GOOGLE_API_KEY', ai_config.google_api_key)
     ai_config.google_base_url = os.environ.get('GOOGLE_BASE_URL', ai_config.google_base_url)
     ai_config.google_model = os.environ.get('GOOGLE_MODEL', ai_config.google_model)
+    ai_config.minimax_api_key = os.environ.get('MINIMAX_API_KEY', ai_config.minimax_api_key)
+    ai_config.minimax_base_url = os.environ.get('MINIMAX_BASE_URL', ai_config.minimax_base_url)
+    ai_config.minimax_model = os.environ.get('MINIMAX_MODEL', ai_config.minimax_model)
+    ai_config.deepseek_api_key = os.environ.get('DEEPSEEK_API_KEY', ai_config.deepseek_api_key)
+    ai_config.deepseek_base_url = os.environ.get('DEEPSEEK_BASE_URL', ai_config.deepseek_base_url)
+    ai_config.deepseek_model = os.environ.get('DEEPSEEK_MODEL', ai_config.deepseek_model)
+    ai_config.kimi_api_key = os.environ.get('KIMI_API_KEY', ai_config.kimi_api_key)
+    ai_config.kimi_base_url = os.environ.get('KIMI_BASE_URL', ai_config.kimi_base_url)
+    ai_config.kimi_model = os.environ.get('KIMI_MODEL', ai_config.kimi_model)
     ai_config.default_ai_provider = os.environ.get('DEFAULT_AI_PROVIDER', ai_config.default_ai_provider)
     model_provider_env = os.environ.get('DEFAULT_MODEL_PROVIDER')
     ai_config.default_model_provider = (ai_config._normalize_optional_str(model_provider_env)

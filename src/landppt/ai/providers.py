@@ -1630,6 +1630,9 @@ class AIProviderFactory:
         "openai": OpenAIProvider,
         "azure_openai": AzureOpenAIProvider,
         "azure": AzureOpenAIProvider,  # Alias for azure_openai
+        "deepseek": OpenAIProvider,  # OpenAI-compatible
+        "kimi": OpenAIProvider,  # OpenAI-compatible
+        "minimax": OpenAIProvider,  # OpenAI-compatible
         "anthropic": AnthropicProvider,
         "google": GoogleProvider,
         "gemini": GoogleProvider,  # Alias for google
